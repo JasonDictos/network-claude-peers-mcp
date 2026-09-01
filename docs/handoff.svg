@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="249" viewBox="0 0 750 249" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13">
+  <rect width="750" height="249" rx="10" fill="#0d1117" stroke="#30363d"/>
+  <rect width="750" height="30" rx="10" fill="#161b22"/><rect y="20" width="750" height="10" fill="#161b22"/>
+  <circle cx="18" cy="15" r="5" fill="#ff5f56"/><circle cx="36" cy="15" r="5" fill="#ffbd2e"/><circle cx="54" cy="15" r="5" fill="#27c93f"/>
+  <text x="375" y="19" fill="#8b949e" text-anchor="middle" font-size="11">~/api — one session hands work to another</text>
+  <text xml:space="preserve">
+    <tspan x="16" y="44" fill="#7ee787">❯ </tspan><tspan x="31.6" y="44" fill="#c9d1d9">tell the claude in ~/worker that the orders schema changed — new </tspan>
+    <tspan x="16" y="65" fill="#c9d1d9">  currency column, nullable for now</tspan>
+    
+    <tspan x="16" y="107" fill="#d2a8ff">● </tspan><tspan x="31.6" y="107" fill="#c9d1d9">Message sent to </tspan><tspan x="156.4" y="107" fill="#d2a8ff">eager-eddy</tspan><tspan x="234.4" y="107" fill="#c9d1d9"> (~/worker)</tspan>
+    
+    <tspan x="16" y="149" fill="#8b949e">← claude-peers: </tspan><tspan x="140.8" y="149" fill="#d2a8ff">eager-eddy</tspan><tspan x="218.8" y="149" fill="#c9d1d9">: Got it. Regenerating the typed client and</tspan>
+    <tspan x="16" y="170" fill="#c9d1d9">  defaulting currency to USD where absent — will ping when the build is green.</tspan>
+    
+    <tspan x="16" y="212" fill="#56b6c2">~/api</tspan><tspan x="55" y="212" fill="#8b949e">  you@example.com</tspan><tspan x="187.6" y="212" fill="#e3b341">  main</tspan><tspan x="234.39999999999998" y="212" fill="#d2a8ff"> · goofy-joe</tspan><tspan x="328" y="212" fill="#7ee787"> · Opus 5</tspan><tspan x="398.2" y="212" fill="#ffa657"> [host]</tspan>
+  </text>
+</svg>

@@ -40,6 +40,7 @@ This gives them a phone book and a mailbox.
 | 📢 **Broadcast** | One message to every session, exactly once each — subagents collapse into their parent |
 | 📜 **Full message log** | `log -f` tails all peer traffic, untruncated, from any machine |
 | 📊 **Status bar** | Shows the session's peer name, branch, model, and whether it's host or container |
+| 🔓 **Account-agnostic** | Not tied to your Claude login. Sessions signed into *different* accounts — or running as different OS users — talk to each other normally, because routing is by machine and directory, never by account |
 | 🔎 **Honest failures** | Sends report when a recipient can't receive, when a target is offline, and when a path is ambiguous — no silent drops |
 
 ## Quick start
@@ -72,6 +73,28 @@ Open a second session anywhere and try it:
 > *Tell the claude in ~/api that the migration landed* → addressed by directory
 
 The broker daemon starts itself the first time. That's the whole setup.
+
+## See it work
+
+**Hand work between repos.** Address a session by the directory it's working in — no IDs, no lookup. The reply lands in your terminal while you keep working.
+
+![One session hands work to another](docs/handoff.svg)
+
+**See everyone, everywhere.** Host sessions, other machines, and Docker containers in one roster — with what each is working on, and a `[no-push]` flag on any session that can't receive.
+
+![The peer roster across machines](docs/roster.svg)
+
+**Tell everyone at once.** A directive that would otherwise mean twelve terminals and twelve pastes.
+
+![Broadcast to every session](docs/broadcast.svg)
+
+**Leave mail for a session that isn't running.** Messages are addressed to a mailbox, not a process, so a long build or an overnight gap doesn't lose the handoff.
+
+![Durable mailboxes](docs/mailbox.svg)
+
+**It isn't tied to your Claude account.** One terminal signed in as one account, another as a completely different one — different people, different plans, different OS users on the same box. They still see each other and message freely, because the broker routes on machine and directory and never looks at who is logged in.
+
+![Different accounts still talk](docs/accounts.svg)
 
 ## What Claude can do
 

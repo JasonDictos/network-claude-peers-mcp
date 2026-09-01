@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="249" viewBox="0 0 750 249" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13">
+  <rect width="750" height="249" rx="10" fill="#0d1117" stroke="#30363d"/>
+  <rect width="750" height="30" rx="10" fill="#161b22"/><rect y="20" width="750" height="10" fill="#161b22"/>
+  <circle cx="18" cy="15" r="5" fill="#ff5f56"/><circle cx="36" cy="15" r="5" fill="#ffbd2e"/><circle cx="54" cy="15" r="5" fill="#27c93f"/>
+  <text x="375" y="19" fill="#8b949e" text-anchor="middle" font-size="11">/peer-broadcast — one message, every session, once each</text>
+  <text xml:space="preserve">
+    <tspan x="16" y="44" fill="#7ee787">❯ </tspan><tspan x="31.6" y="44" fill="#c9d1d9">/peer-broadcast pinned dep moves to 7.15 — rebuild before you push</tspan>
+    
+    <tspan x="16" y="86" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="86" fill="#d2a8ff">goofy-joe</tspan><tspan x="109.6" y="86" fill="#8b949e">            </tspan><tspan x="203.2" y="86" fill="#56b6c2">~/api</tspan>
+    <tspan x="16" y="107" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="107" fill="#d2a8ff">eager-eddy</tspan><tspan x="117.4" y="107" fill="#8b949e">           </tspan><tspan x="203.2" y="107" fill="#56b6c2">~/worker</tspan>
+    <tspan x="16" y="128" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="128" fill="#d2a8ff">build-boss@archiver</tspan><tspan x="187.6" y="128" fill="#8b949e">  </tspan><tspan x="203.2" y="128" fill="#56b6c2">~/ci</tspan>
+    <tspan x="16" y="149" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="149" fill="#d2a8ff">quiet-otis@archiver</tspan><tspan x="187.6" y="149" fill="#8b949e">  </tspan><tspan x="203.2" y="149" fill="#56b6c2">~/etl</tspan>
+    <tspan x="16" y="170" fill="#c9d1d9">Broadcast to 4 peer(s).</tspan>
+    
+    <tspan x="16" y="212" fill="#8b949e"># subagents collapse into their parent — nobody gets it twice</tspan>
+  </text>
+</svg>
