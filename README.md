@@ -231,8 +231,10 @@ With `OPENAI_API_KEY` set, each session generates a one-line summary of what it'
 
 ## Credits
 
-A network-capable fork of [louislva/claude-peers-mcp](https://github.com/louislva/claude-peers-mcp), which introduced the idea and the original broker/channel design. This fork adds names and sticky identity, path and host addressing, cross-machine networking with authentication, Docker support, durable mailboxes, broadcast, the message log, the status line, and the update flow.
+Inspired by — and originally built on — [louislva/claude-peers-mcp](https://github.com/louislva/claude-peers-mcp) by Louis Arge, which introduced the idea of a broker plus a channel-pushing MCP server so Claude Code sessions could message each other. That project is worth a star.
+
+This one takes it onto the network and hardens it for daily multi-session use: human names with sticky per-directory identity, addressing by path and machine, cross-machine peering with token auth, dev-container support, durable mailboxes that survive a session restart, broadcast, a full message log, the status line, and a one-command update flow.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE). Copyright © 2026 Louis Arge (original project) and Jason Dictos (this work).
