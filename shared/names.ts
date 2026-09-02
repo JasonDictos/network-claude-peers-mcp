@@ -19,6 +19,58 @@ export const NOUNS = [
 
 const MAX_RANDOM_ATTEMPTS = 100;
 
+/**
+ * Names are scoped to the repository a session works in, so the name itself
+ * says what the peer is for and is easy to type: libeen-cpp-dude,
+ * archiver-tools-dudette. Gender is picked at random per session; collisions
+ * inside one repo take the other token, then a low number.
+ */
+export const PERSON_TOKENS = ["dude", "dudette"] as const;
+
+/** Repo (or directory) a session belongs to, as a name-safe token. */
+export function repoBase(cwd: string, gitRoot: string | null): string {
+  const path = (gitRoot ?? cwd).replace(/\/+$/, "");
+  const last = path.split("/").filter(Boolean).pop() ?? "";
+  const clean = last.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return clean || "peer";
+}
+
+/**
+ * A repo-scoped name: <repo>-dude / <repo>-dudette, then -2..-10 for further
+ * sessions in the same repo, and finally <repo>-<adjective>-<noun> if even
+ * those are taken — so a name is always available and always says its scope.
+ */
+export function scopedName(base: string, taken: Set<string>): string {
+  const order =
+    Math.random() < 0.5
+      ? [PERSON_TOKENS[0], PERSON_TOKENS[1]]
+      : [PERSON_TOKENS[1], PERSON_TOKENS[0]];
+
+  for (const token of order) {
+    const name = `${base}-${token}`;
+    if (!taken.has(name)) return name;
+  }
+  // Low digits: nobody runs more than a handful of sessions per repo
+  for (let i = 2; i <= 10; i++) {
+    for (const token of order) {
+      const name = `${base}-${token}-${i}`;
+      if (!taken.has(name)) return name;
+    }
+  }
+  // Fall back to the adjective-noun pool, still repo-scoped
+  for (let i = 0; i < MAX_RANDOM_ATTEMPTS; i++) {
+    const name = `${base}-${pick(ADJECTIVES)}-${pick(NOUNS)}`;
+    if (!taken.has(name)) return name;
+  }
+  for (const a of ADJECTIVES) {
+    for (const noun of NOUNS) {
+      const name = `${base}-${a}-${noun}`;
+      if (!taken.has(name)) return name;
+    }
+  }
+  return `${base}-${generateName(taken)}`;
+}
+
 function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
 }

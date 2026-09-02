@@ -13,6 +13,7 @@
  *   bun cli.ts iam <name>          — Rename this session's peer
  *   bun cli.ts statusline          — Statusline command (reads Claude Code JSON on stdin)
  *   bun cli.ts log [-n N] [-f]     — Show message history (-f follows, tail-style)
+ *   bun cli.ts kill <name>         — Remove a peer (stops its MCP server when local)
  *   bun cli.ts network-setup       — Configure cross-machine peering (--show/--client)
  *   bun cli.ts update              — Pull latest code, reinstall deps, restart the broker
  *   bun cli.ts kill-broker         — Stop the broker daemon
@@ -20,8 +21,8 @@
 
 import type { Peer, Message, SendMessageResponse } from "./shared/types.ts";
 import { brokerFetch, BROKER_PORT, BROKER_URL, IS_REMOTE } from "./shared/client.ts";
-import { claudeKey, getParentPid, channelEnabled } from "./shared/runtime.ts";
-import { sessionKey } from "./shared/resolve.ts";
+import { claudeKey, getParentPid, channelEnabled, getRuntimeId } from "./shared/runtime.ts";
+import { sessionKey, resolveTarget } from "./shared/resolve.ts";
 import { loadConfig, saveConfig, generateToken, CONFIG_PATH, machineName, accountEmail } from "./shared/config.ts";
 import { hostMatches, resolveHost, localAddresses } from "./shared/hosts.ts";
 import { hostname, networkInterfaces } from "node:os";
@@ -419,6 +420,77 @@ switch (cmd) {
     break;
   }
 
+  case "kill": {
+    // Remove a peer — normally a stale registration whose session is gone but
+    // whose MCP server is still heartbeating, which holds that directory's
+    // sticky name hostage.
+    const target = process.argv[3];
+    if (!target) {
+      console.error("Usage: bun cli.ts kill <name|id|path>");
+      process.exit(1);
+    }
+    try {
+      const peers = await listAllPeers();
+      const r = resolveTarget(peers, target, process.env.HOME ?? "/");
+      if (r.kind === "none") {
+        console.error(`No peer matches "${target}".`);
+        process.exit(1);
+      }
+      if (r.kind === "ambiguous") {
+        console.error(`"${target}" matches several peers — name one:`);
+        for (const p of r.candidates) console.error(`  ${peerLabel(p)}  ${p.id}  ${p.cwd}`);
+        process.exit(1);
+      }
+      const peer = r.peer;
+      const self = findSelf(peers, process.cwd());
+      if (self && self.id === peer.id) {
+        console.error(`That's this session (${peer.name}) — refusing to disconnect yourself.`);
+        process.exit(1);
+      }
+
+      // Its pid is only meaningful in its own PID namespace: a container pid
+      // or another machine's pid would be someone else's process here.
+      const local = peer.runtime === getRuntimeId();
+      let killed = false;
+      if (local) {
+        try {
+          process.kill(peer.pid, "SIGTERM");
+          for (let i = 0; i < 20 && !killed; i++) {
+            await new Promise((r) => setTimeout(r, 100));
+            try {
+              process.kill(peer.pid, 0);
+            } catch {
+              killed = true;
+            }
+          }
+          if (!killed) {
+            process.kill(peer.pid, "SIGKILL");
+            killed = true;
+          }
+        } catch {
+          killed = true; // already gone
+        }
+      }
+
+      await brokerFetch("/unregister", { id: peer.id });
+      console.log(`Removed ${peerLabel(peer)} (${peer.id}) from the peer list.`);
+      if (killed) {
+        console.log(`Its MCP server (pid ${peer.pid}) was stopped.`);
+      } else {
+        const where = (peer.runtime ?? "").split(":")[0] || peer.host || "elsewhere";
+        console.log(
+          `Its MCP server runs in another runtime (${where}, pid ${peer.pid}), so it could not be ` +
+            `signalled from here. If that process is still alive it will re-register shortly — stop ` +
+            `it there, e.g. docker exec <container> kill ${peer.pid}`
+        );
+      }
+    } catch (e) {
+      console.error(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+    break;
+  }
+
   case "network-setup": {
     const args = process.argv.slice(3);
     const flag = (name: string) => {
@@ -596,6 +668,7 @@ Usage:
   bun cli.ts iam <name>          Rename this session's peer
   bun cli.ts statusline          Statusline command (Claude Code JSON on stdin)
   bun cli.ts log [-n N] [-f]     Show message history (-f follows, tail-style)
+  bun cli.ts kill <name|id|path> Remove a peer (stops its MCP server when local)
   bun cli.ts network-setup       Cross-machine peering (--show, --client <url> --token <t>)
   bun cli.ts update              Pull latest code, reinstall deps, restart the broker
   bun cli.ts kill-broker         Stop the broker daemon`);

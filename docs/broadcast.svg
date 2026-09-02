@@ -6,10 +6,10 @@
   <text xml:space="preserve">
     <tspan x="16" y="44" fill="#7ee787">❯ </tspan><tspan x="31.6" y="44" fill="#c9d1d9">/peer-broadcast pinned dep moves to 7.15 — rebuild before you push</tspan>
     
-    <tspan x="16" y="86" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="86" fill="#d2a8ff">goofy-joe</tspan><tspan x="109.6" y="86" fill="#8b949e">            </tspan><tspan x="203.2" y="86" fill="#56b6c2">~/api</tspan>
-    <tspan x="16" y="107" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="107" fill="#d2a8ff">eager-eddy</tspan><tspan x="117.4" y="107" fill="#8b949e">           </tspan><tspan x="203.2" y="107" fill="#56b6c2">~/worker</tspan>
-    <tspan x="16" y="128" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="128" fill="#d2a8ff">build-boss@archiver</tspan><tspan x="187.6" y="128" fill="#8b949e">  </tspan><tspan x="203.2" y="128" fill="#56b6c2">~/ci</tspan>
-    <tspan x="16" y="149" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="149" fill="#d2a8ff">quiet-otis@archiver</tspan><tspan x="187.6" y="149" fill="#8b949e">  </tspan><tspan x="203.2" y="149" fill="#56b6c2">~/etl</tspan>
+    <tspan x="16" y="86" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="86" fill="#d2a8ff">api-dude</tspan><tspan x="101.8" y="86" fill="#8b949e">            </tspan><tspan x="195.39999999999998" y="86" fill="#56b6c2">~/api</tspan>
+    <tspan x="16" y="107" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="107" fill="#d2a8ff">worker-dudette</tspan><tspan x="148.6" y="107" fill="#8b949e">           </tspan><tspan x="234.39999999999998" y="107" fill="#56b6c2">~/worker</tspan>
+    <tspan x="16" y="128" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="128" fill="#d2a8ff">ci-dude@archiver</tspan><tspan x="164.2" y="128" fill="#8b949e">  </tspan><tspan x="179.79999999999998" y="128" fill="#56b6c2">~/ci</tspan>
+    <tspan x="16" y="149" fill="#7ee787">-&gt; </tspan><tspan x="39.4" y="149" fill="#d2a8ff">etl-dudette@archiver</tspan><tspan x="195.4" y="149" fill="#8b949e">  </tspan><tspan x="211" y="149" fill="#56b6c2">~/etl</tspan>
     <tspan x="16" y="170" fill="#c9d1d9">Broadcast to 4 peer(s).</tspan>
     
     <tspan x="16" y="212" fill="#8b949e"># subagents collapse into their parent — nobody gets it twice</tspan>

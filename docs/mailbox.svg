@@ -6,12 +6,12 @@
   <text xml:space="preserve">
     <tspan x="16" y="44" fill="#7ee787">❯ </tspan><tspan x="31.6" y="44" fill="#c9d1d9">tell the claude in ~/etl that the backfill finished</tspan>
     
-    <tspan x="16" y="86" fill="#e3b341">● </tspan><tspan x="31.6" y="86" fill="#c9d1d9">No live session for "~/etl" — queued for </tspan><tspan x="351.40000000000003" y="86" fill="#d2a8ff">quiet-otis</tspan>
+    <tspan x="16" y="86" fill="#e3b341">● </tspan><tspan x="31.6" y="86" fill="#c9d1d9">No live session for "~/etl" — queued for </tspan><tspan x="351.40000000000003" y="86" fill="#d2a8ff">etl-dudette</tspan>
     <tspan x="16" y="107" fill="#8b949e">  (delivered when it returns; held 7 days)</tspan>
     
     <tspan x="16" y="149" fill="#8b949e">  … 40 minutes later, on the other machine …</tspan>
     
     <tspan x="16" y="191" fill="#7ee787">archiver:~/etl $ </tspan><tspan x="148.6" y="191" fill="#c9d1d9">claude</tspan>
-    <tspan x="16" y="212" fill="#8b949e">← claude-peers: </tspan><tspan x="140.8" y="212" fill="#d2a8ff">goofy-joe@jason-desktop</tspan><tspan x="320.20000000000005" y="212" fill="#c9d1d9">: the backfill finished</tspan>
+    <tspan x="16" y="212" fill="#8b949e">← claude-peers: </tspan><tspan x="140.8" y="212" fill="#d2a8ff">api-dude@jason-desktop</tspan><tspan x="312.4" y="212" fill="#c9d1d9">: the backfill finished</tspan>
   </text>
 </svg>

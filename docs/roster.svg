@@ -4,14 +4,14 @@
   <circle cx="18" cy="15" r="5" fill="#ff5f56"/><circle cx="36" cy="15" r="5" fill="#ffbd2e"/><circle cx="54" cy="15" r="5" fill="#27c93f"/>
   <text x="375" y="19" fill="#8b949e" text-anchor="middle" font-size="11">$ bun cli.ts peers — every session, wherever it runs</text>
   <text xml:space="preserve">
-    <tspan x="16" y="44" fill="#d2a8ff">goofy-joe</tspan><tspan x="86.2" y="44" fill="#8b949e">             a1b2c3d4  </tspan><tspan x="265.6" y="44" fill="#56b6c2">~/api</tspan><tspan x="304.6" y="44" fill="#8b949e">                    jason-desktop</tspan>
+    <tspan x="16" y="44" fill="#d2a8ff">api-dude              </tspan><tspan x="187.6" y="44" fill="#8b949e">a1b2c3d4  </tspan><tspan x="265.6" y="44" fill="#56b6c2">~/api       </tspan><tspan x="359.20000000000005" y="44" fill="#8b949e">jason-desktop</tspan>
     <tspan x="16" y="65" fill="#c9d1d9">  Summary: adding the currency column + migration</tspan>
-    <tspan x="16" y="86" fill="#d2a8ff">eager-eddy</tspan><tspan x="94" y="86" fill="#8b949e">            e5f6a7b8  </tspan><tspan x="265.6" y="86" fill="#56b6c2">~/worker</tspan><tspan x="328" y="86" fill="#8b949e">                 jason-desktop</tspan>
+    <tspan x="16" y="86" fill="#d2a8ff">worker-dudette        </tspan><tspan x="187.6" y="86" fill="#8b949e">e5f6a7b8  </tspan><tspan x="265.6" y="86" fill="#56b6c2">~/worker    </tspan><tspan x="359.20000000000005" y="86" fill="#8b949e">jason-desktop</tspan>
     <tspan x="16" y="107" fill="#c9d1d9">  Summary: regenerating the typed client</tspan>
-    <tspan x="16" y="128" fill="#d2a8ff">build-boss@archiver</tspan><tspan x="164.2" y="128" fill="#8b949e">   9c0d1e2f  </tspan><tspan x="265.59999999999997" y="128" fill="#56b6c2">~/ci</tspan><tspan x="296.79999999999995" y="128" fill="#8b949e">                     archiver </tspan><tspan x="530.8" y="128" fill="#79c0ff">[docker]</tspan>
+    <tspan x="16" y="128" fill="#d2a8ff">ci-dude@archiver      </tspan><tspan x="187.6" y="128" fill="#8b949e">9c0d1e2f  </tspan><tspan x="265.6" y="128" fill="#56b6c2">~/ci        </tspan><tspan x="359.20000000000005" y="128" fill="#8b949e">archiver</tspan><tspan x="421.6" y="128" fill="#79c0ff"> [docker]</tspan>
     <tspan x="16" y="149" fill="#c9d1d9">  Summary: babysitting the release pipeline</tspan>
-    <tspan x="16" y="170" fill="#d2a8ff">quiet-otis@archiver</tspan><tspan x="164.2" y="170" fill="#8b949e">   4a5b6c7d  </tspan><tspan x="265.59999999999997" y="170" fill="#56b6c2">~/etl</tspan><tspan x="304.59999999999997" y="170" fill="#ff7b72">  [no-push]</tspan><tspan x="390.4" y="170" fill="#8b949e">         archiver</tspan>
+    <tspan x="16" y="170" fill="#d2a8ff">etl-dudette@archiver  </tspan><tspan x="187.6" y="170" fill="#8b949e">4a5b6c7d  </tspan><tspan x="265.6" y="170" fill="#56b6c2">~/etl       </tspan><tspan x="359.20000000000005" y="170" fill="#8b949e">archiver</tspan><tspan x="421.6" y="170" fill="#ff7b72"> [no-push]</tspan>
     
-    <tspan x="16" y="212" fill="#8b949e"># a name is a complete address — from any machine, in or out of Docker</tspan>
+    <tspan x="16" y="212" fill="#8b949e"># the name says its repo AND is a complete address, from any machine</tspan>
   </text>
 </svg>

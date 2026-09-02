@@ -5,13 +5,13 @@
   <text x="375" y="19" fill="#8b949e" text-anchor="middle" font-size="11">not tied to your Claude account — different logins still talk</text>
   <text xml:space="preserve">
     <tspan x="16" y="44" fill="#8b949e"># terminal 1 — signed in as alice@example.com</tspan>
-    <tspan x="16" y="65" fill="#56b6c2">~/api</tspan><tspan x="55" y="65" fill="#8b949e">  alice@example.com</tspan><tspan x="203.2" y="65" fill="#e3b341">  main</tspan><tspan x="250" y="65" fill="#d2a8ff"> · goofy-joe</tspan><tspan x="343.6" y="65" fill="#7ee787"> · Opus 5</tspan><tspan x="413.8" y="65" fill="#ffa657"> [host]</tspan>
+    <tspan x="16" y="65" fill="#56b6c2">~/api</tspan><tspan x="55" y="65" fill="#8b949e">  alice@example.com</tspan><tspan x="203.2" y="65" fill="#e3b341">  main</tspan><tspan x="250" y="65" fill="#d2a8ff"> · api-dude</tspan><tspan x="335.8" y="65" fill="#7ee787"> · Opus 5</tspan><tspan x="406" y="65" fill="#ffa657"> [host]</tspan>
     
     <tspan x="16" y="107" fill="#8b949e"># terminal 2 — a different account entirely</tspan>
-    <tspan x="16" y="128" fill="#56b6c2">~/worker</tspan><tspan x="78.4" y="128" fill="#8b949e">  bob@example.com</tspan><tspan x="211" y="128" fill="#e3b341">  main</tspan><tspan x="257.8" y="128" fill="#d2a8ff"> · eager-eddy</tspan><tspan x="359.2" y="128" fill="#7ee787"> · Sonnet 5</tspan><tspan x="445" y="128" fill="#ffa657"> [host]</tspan>
+    <tspan x="16" y="128" fill="#56b6c2">~/worker</tspan><tspan x="78.4" y="128" fill="#8b949e">  bob@example.com</tspan><tspan x="211" y="128" fill="#e3b341">  main</tspan><tspan x="257.8" y="128" fill="#d2a8ff"> · worker-dudette</tspan><tspan x="390.4" y="128" fill="#7ee787"> · Sonnet 5</tspan><tspan x="476.2" y="128" fill="#ffa657"> [host]</tspan>
     
-    <tspan x="16" y="170" fill="#7ee787">❯ </tspan><tspan x="31.6" y="170" fill="#c9d1d9">ask eager-eddy whether the client regen is done</tspan>
-    <tspan x="16" y="191" fill="#8b949e">← claude-peers: </tspan><tspan x="140.8" y="191" fill="#d2a8ff">eager-eddy</tspan><tspan x="218.8" y="191" fill="#c9d1d9">: done and pushed — commit 4f2a1c9</tspan>
+    <tspan x="16" y="170" fill="#7ee787">❯ </tspan><tspan x="31.6" y="170" fill="#c9d1d9">ask worker-dudette whether the client regen is done</tspan>
+    <tspan x="16" y="191" fill="#8b949e">← claude-peers: </tspan><tspan x="140.8" y="191" fill="#d2a8ff">worker-dudette</tspan><tspan x="250" y="191" fill="#c9d1d9">: done and pushed — commit 4f2a1c9</tspan>
     
     <tspan x="16" y="233" fill="#8b949e"># the broker routes by machine + directory, never by account</tspan>
   </text>

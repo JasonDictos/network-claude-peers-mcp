@@ -30,8 +30,8 @@ This gives them a phone book and a mailbox.
 
 | | |
 |---|---|
-| 🏷 **Human names** | Every session gets a memorable name (`goofy-joe`), globally unique across all machines, so a name alone is a complete address |
-| 📌 **Sticky identity** | Names persist per directory — relaunch a session and it's still `goofy-joe`. Rename it (`iam api-boss`) and that sticks too |
+| 🏷 **Names that say their scope** | Sessions are named after the repo they work in — `libeen-cpp-dude`, `archiver-tools-dudette` — globally unique, so a name tells you what a peer is *for* and is a complete address |
+| 📌 **Sticky identity** | Names persist per directory — relaunch a session and it's still `libeen-cpp-dude`. Rename it (`iam api-boss`) and that sticks too |
 | 📁 **Address by path** | `~/worker` reaches whoever runs there, matching working directory *or* git repo. Ambiguity returns candidates instead of guessing |
 | 🌐 **Cross-machine** | One broker, many machines. Token-authenticated over your LAN/VPN, with short-name/FQDN/IP resolution and `machine:~/path` addressing |
 | 🐳 **Docker-aware** | Dev containers join automatically — no wiring. A container and its host share one identity, so names and mail follow you in and out |
@@ -69,7 +69,7 @@ claude --dangerously-load-development-channels server:claude-peers
 Open a second session anywhere and try it:
 
 > *List all peers* → every running session, its directory, and what it's working on
-> *Ask goofy-joe what it's working on* → answers in seconds
+> *Ask libeen-cpp-dude what it's working on* → answers in seconds
 > *Tell the claude in ~/api that the migration landed* → addressed by directory
 
 The broker daemon starts itself the first time. That's the whole setup.
@@ -106,16 +106,35 @@ The broker daemon starts itself the first time. That's the whole setup.
 | `set_summary` | Describe what you're working on, visible to every peer |
 | `check_messages` | Read queued messages explicitly |
 
+## Naming
+
+A session is named after the repository it works in, so the name carries its scope and is quick to type:
+
+```
+libeen-cpp-dude          # first session in ~/libeen-cpp
+libeen-cpp-dudette       # a second session in the same repo
+libeen-cpp-dude-2        # a third, and so on — low numbers only
+libeen-cpp-zesty-otis    # if a repo somehow exhausts those
+```
+
+The repo comes from the git root (falling back to the directory name), and which of the pair you get is random per session. Names are **globally unique** across every machine and container because one broker issues them — that's what lets a bare name be a complete address.
+
+Names are **sticky per directory**: relaunch a session in `~/libeen-cpp` and it's `libeen-cpp-dude` again. Rename one and that sticks too:
+
+```bash
+bun cli.ts iam api-boss
+```
+
 ## Addressing
 
 Names are globally unique — the broker issues them — so **a name is a complete address**, no matter which machine or container the session is on. Directories repeat across machines, so paths can be qualified:
 
 ```
-goofy-joe                      # by name, from anywhere
+libeen-cpp-dude                # by name, from anywhere
 ~/worker                       # by directory (or its git repo)
 archiver:~/worker              # that directory on that machine
 archiver:                      # that machine's session
-goofy-joe@archiver             # the form shown in listings
+libeen-cpp-dude@archiver       # the form shown in listings
 ```
 
 An unqualified path that matches several sessions fails with the candidates listed, rather than silently picking one.
@@ -161,6 +180,7 @@ bun cli.ts whoami                # this session's identity
 bun cli.ts iam <name>            # rename this session
 bun cli.ts log [-n N] [-f]       # full message history; -f tails it live
 bun cli.ts statusline            # for statusLine in settings.json
+bun cli.ts kill <name>           # remove a peer (stops its MCP server when local)
 bun cli.ts network-setup         # cross-machine peering
 bun cli.ts update                # pull, reinstall, restart the broker
 bun cli.ts kill-broker           # stop the broker
@@ -206,7 +226,7 @@ The same pattern works for the others — swap `peers` for `whoami`, `iam $ARGUM
 "statusLine": { "type": "command", "command": "~/.bun/bin/bun ~/claude-peers-mcp/cli.ts statusline" }
 ```
 
-Renders `~/api  you@example.com  main · goofy-joe · Opus 5 [host]` — directory, account, branch, peer name, model, and host/container. It degrades gracefully (never blocks, never errors) when the broker is down, and flags `[no-push]` if the session was started without the channel flag and therefore can't receive.
+Renders `~/api  you@example.com  main · api-dude · Opus 5 [host]` — directory, account, branch, peer name, model, and host/container. It degrades gracefully (never blocks, never errors) when the broker is down, and flags `[no-push]` if the session was started without the channel flag and therefore can't receive.
 
 ## How it works
 
@@ -226,6 +246,16 @@ A **broker daemon** holds the peer registry and message queue in SQLite. Each se
 ```
 
 The broker auto-launches with the first session, prunes dead peers, and exits cleanly. MCP servers shut themselves down when their session dies, so the roster stays honest.
+
+### Clearing out a stale peer
+
+A session that dies badly can leave its MCP server running, which keeps the peer registered and holds that directory's sticky name. Remove it with:
+
+```bash
+bun cli.ts kill <name>
+```
+
+It stops the MCP server when that process is reachable from where you run it, unregisters the peer either way, and tells you where to stop it (machine, runtime, pid) when it isn't — a container peer will otherwise re-register itself.
 
 ## Updating
 
