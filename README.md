@@ -180,6 +180,7 @@ bun cli.ts whoami                # this session's identity
 bun cli.ts iam <name>            # rename this session
 bun cli.ts log [-n N] [-f]       # full message history; -f tails it live
 bun cli.ts statusline            # for statusLine in settings.json
+bun cli.ts kill <name>           # remove a peer (stops its MCP server when local)
 bun cli.ts network-setup         # cross-machine peering
 bun cli.ts update                # pull, reinstall, restart the broker
 bun cli.ts kill-broker           # stop the broker
@@ -245,6 +246,16 @@ A **broker daemon** holds the peer registry and message queue in SQLite. Each se
 ```
 
 The broker auto-launches with the first session, prunes dead peers, and exits cleanly. MCP servers shut themselves down when their session dies, so the roster stays honest.
+
+### Clearing out a stale peer
+
+A session that dies badly can leave its MCP server running, which keeps the peer registered and holds that directory's sticky name. Remove it with:
+
+```bash
+bun cli.ts kill <name>
+```
+
+It stops the MCP server when that process is reachable from where you run it, unregisters the peer either way, and tells you where to stop it (machine, runtime, pid) when it isn't — a container peer will otherwise re-register itself.
 
 ## Updating
 
