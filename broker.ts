@@ -23,7 +23,7 @@ import type {
   Peer,
   Message,
 } from "./shared/types.ts";
-import { generateName, childName } from "./shared/names.ts";
+import { generateName, childName, scopedName, repoBase } from "./shared/names.ts";
 import { resolveTarget, resolveMailbox, sessionKey, sessionKeyOf } from "./shared/resolve.ts";
 import type { Mailbox } from "./shared/resolve.ts";
 import { getRuntimeId } from "./shared/runtime.ts";
@@ -445,7 +445,7 @@ function handleRegister(body: RegisterRequest): RegisterResponse {
     if (bound && !taken.has(bound.name)) {
       name = bound.name;
     } else {
-      name = generateName(taken);
+      name = scopedName(repoBase(body.cwd, body.git_root), taken);
       if (!bound) bindName(host, body.cwd, name);
     }
   }
