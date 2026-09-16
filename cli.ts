@@ -21,7 +21,7 @@
 
 import type { Peer, Message, SendMessageResponse } from "./shared/types.ts";
 import { brokerFetch, BROKER_PORT, BROKER_URL, IS_REMOTE } from "./shared/client.ts";
-import { claudeKey, getParentPid, channelEnabled, getRuntimeId } from "./shared/runtime.ts";
+import { claudeKey, getParentPid, getRuntimeId } from "./shared/runtime.ts";
 import { sessionKey, resolveTarget } from "./shared/resolve.ts";
 import { loadConfig, saveConfig, generateToken, CONFIG_PATH, machineName, accountEmail } from "./shared/config.ts";
 import { hostMatches, resolveHost, localAddresses } from "./shared/hosts.ts";
@@ -287,8 +287,10 @@ switch (cmd) {
         if (self.summary) console.log(self.summary);
         // Registered but not loaded as a channel = inbound messages are
         // silently dropped by Claude Code. Say so; it looks like a network
-        // fault otherwise.
-        if (self.claude_pid != null && channelEnabled(self.claude_pid) === false) {
+        // fault otherwise. Trust the flag the peer's own MCP server stored:
+        // only that process knows how it was loaded (CLAUDE_PLUGIN_ROOT is in
+        // its environment, not ours), so recomputing it here gets it wrong.
+        if (self.push_enabled === 0) {
           let pending = 0;
           try {
             pending = (await brokerFetch<{ count: number }>("/pending", { id: self.id })).count;
@@ -338,7 +340,7 @@ switch (cmd) {
       name = self?.name ?? null;
       // Registered, but the session never loaded claude-peers as a channel:
       // inbound messages are dropped silently, so flag it in the status bar
-      pushOff = self?.claude_pid != null && channelEnabled(self.claude_pid) === false;
+      pushOff = self?.push_enabled === 0;
       // Push is off, so messages sit queued rather than arriving — show how
       // many are waiting. Only in this case: with push on the queue is
       // drained within a second, so it would always read zero.

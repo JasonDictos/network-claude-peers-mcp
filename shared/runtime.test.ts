@@ -37,13 +37,36 @@ describe("channelEnabled", () => {
 
   test("true when loaded as a development channel", () => {
     withArgv(["--dangerously-load-development-channels", "server:claude-peers"], (pid) => {
-      expect(channelEnabled(pid)).toBe(true);
+      expect(channelEnabled(pid, "claude-peers", undefined)).toBe(true);
     });
   });
 
-  test("true for a plugin channel entry", () => {
+  test("true for a plugin channel entry, when we ARE the plugin's server", () => {
     withArgv(["--channels", "plugin:claude-peers@my-marketplace"], (pid) => {
-      expect(channelEnabled(pid)).toBe(true);
+      expect(channelEnabled(pid, "claude-peers", "/mkt/claude-peers")).toBe(true);
+    });
+  });
+
+  // The silent-loss bug: the same server name registered BOTH in a plugin and
+  // in .claude.json. The config copy wins the connection but is authorized by
+  // `server:`, not the plugin entry — Claude Code logs "server claude-peers
+  // not in --channels list" and discards every push. Reporting push as working
+  // here makes the server drain the broker into a void.
+  test("false when a config-scope server sees only the plugin's entry", () => {
+    withArgv(["--channels", "plugin:claude-peers@my-marketplace"], (pid) => {
+      expect(channelEnabled(pid, "claude-peers", undefined)).toBe(false);
+    });
+  });
+
+  test("false when the plugin's server sees only a server: entry", () => {
+    withArgv(["--dangerously-load-development-channels", "server:claude-peers"], (pid) => {
+      expect(channelEnabled(pid, "claude-peers", "/mkt/claude-peers")).toBe(false);
+    });
+  });
+
+  test("a plugin entry for a DIFFERENT plugin does not enable us", () => {
+    withArgv(["--channels", "plugin:something-else@my-marketplace"], (pid) => {
+      expect(channelEnabled(pid, "claude-peers", "/mkt/claude-peers")).toBe(false);
     });
   });
 

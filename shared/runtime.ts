@@ -63,19 +63,42 @@ export function readCmdline(pid: number): string[] | null {
 }
 
 /**
- * Whether a Claude Code process loaded this MCP server as a *channel*.
+ * Whether a Claude Code process loaded *this* MCP server as a channel.
  *
- * Without `server:claude-peers` (or `plugin:…`) in --channels /
+ * Without a channel entry in --channels /
  * --dangerously-load-development-channels, the server still registers and its
  * tools work, but Claude Code has no listener for pushed events and drops
  * them silently — inbound peer messages never reach the session. Detecting it
  * turns that silence into something we can warn about.
+ *
+ * Which entry authorizes us depends on how we were loaded, and the two are
+ * NOT interchangeable. Claude Code sets CLAUDE_PLUGIN_ROOT only for a server
+ * a plugin supplies, and authorizes it as `plugin:<plugin>@<marketplace>`; a
+ * server configured in .claude.json / .mcp.json is authorized as
+ * `server:<name>`. Accepting either form regardless of how we were loaded is
+ * a silent-data-loss bug: register the same server name in both places and
+ * the config copy wins the connection, sees the plugin's entry in argv,
+ * reports push working, drains the broker — and Claude Code discards every
+ * notification with "server <name> not in --channels list for this session".
  */
-export function channelEnabled(claudePid: number, serverName = "claude-peers"): boolean | null {
+export function channelEnabled(
+  claudePid: number,
+  serverName = "claude-peers",
+  pluginRoot = process.env.CLAUDE_PLUGIN_ROOT
+): boolean | null {
   const argv = readCmdline(claudePid);
   if (!argv) return null; // can't tell
-  const entry = new RegExp(`^(server|plugin):${serverName}(@|$)`);
+  // A plugin's own name is the last segment of its root, and it is the name
+  // the channel entry carries — not necessarily the MCP server's name.
+  const entry = pluginRoot
+    ? new RegExp(`^plugin:${escapeRe(pluginRoot.replace(/\/+$/, "").split("/").pop() ?? "")}(@|$)`)
+    : new RegExp(`^server:${escapeRe(serverName)}$`);
   return argv.some((a) => entry.test(a));
+}
+
+/** Escape a string for literal use inside a RegExp. */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

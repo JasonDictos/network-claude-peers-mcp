@@ -25,6 +25,7 @@ import type {
 } from "./shared/types.ts";
 import { generateName, childName, scopedName, repoBase } from "./shared/names.ts";
 import { resolveTarget, resolveMailbox, sessionKey, sessionKeyOf } from "./shared/resolve.ts";
+import { adoptOrphanedMail } from "./shared/mailbox.ts";
 import type { Mailbox } from "./shared/resolve.ts";
 import { getRuntimeId } from "./shared/runtime.ts";
 import { loadConfig, isLoopbackBind, isLoopbackAddress, machineName, writeMachineMarker } from "./shared/config.ts";
@@ -465,6 +466,32 @@ function handleRegister(body: RegisterRequest): RegisterResponse {
     now,
     now
   );
+
+  // A returning session can draw a DIFFERENT name for the same directory: the
+  // sticky name may be held by a co-resident session, so it lands on
+  // "-dudette" instead of "-dude" (or the reverse once that session exits).
+  // The mailbox key is (name, host, cwd), so mail addressed to the previous
+  // name is stranded — still delivered = 0, but nothing will ever select it
+  // again, which quietly breaks the promise that mail outlives a session.
+  // Adopt undelivered mail for this (host, cwd) whose addressee has no live
+  // peer. Scoped to the directory, and skipped for subagent registrations, so
+  // it can never take mail belonging to a sibling that is still running.
+  if (siblings.length === 0) {
+    const adopted = adoptOrphanedMail(db, {
+      host,
+      cwd: body.cwd,
+      name,
+      heldByLivePeers: live
+        .filter((p) => peerHost(p) === host && p.cwd === body.cwd)
+        .map((p) => p.name),
+    });
+    if (adopted > 0) {
+      console.error(
+        `[claude-peers broker] ${name} adopted ${adopted} stranded message(s) for ${host}:${body.cwd}`
+      );
+    }
+  }
+
   return { id, name };
 }
 
