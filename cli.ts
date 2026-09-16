@@ -610,7 +610,7 @@ switch (cmd) {
       const deps = out(git("diff", "--name-only", `${before}..${after}`, "--", "package.json", "bun.lock"));
       if (deps) {
         console.log("Dependencies changed — running bun install");
-        Bun.spawnSync(["bun", "install"], { cwd: repoDir, stdout: "inherit", stderr: "inherit" });
+        Bun.spawnSync([process.execPath, "install"], { cwd: repoDir, stdout: "inherit", stderr: "inherit" });
       }
     }
 
@@ -622,7 +622,7 @@ switch (cmd) {
       const lsof = Bun.spawnSync(["lsof", "-ti", `:${BROKER_PORT}`, "-sTCP:LISTEN"]);
       const pids = new TextDecoder().decode(lsof.stdout).trim().split("\n").filter(Boolean);
       for (const pid of pids) process.kill(parseInt(pid), "SIGTERM");
-      Bun.spawn(["setsid", "bun", `${repoDir}broker.ts`], {
+      Bun.spawn(["setsid", process.execPath, `${repoDir}broker.ts`], {
         stdio: ["ignore", "ignore", "ignore"],
       }).unref();
       console.log("Broker restarted on the new code.");
