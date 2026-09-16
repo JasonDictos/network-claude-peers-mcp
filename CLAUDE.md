@@ -23,13 +23,24 @@ Peer discovery and messaging MCP channel for Claude Code instances.
 
 ## Running
 
+Load this server exactly once per session. The channel entry that authorizes
+push depends on how it was loaded, and the two forms are not interchangeable:
+
 ```bash
-# Start Claude Code with the channel:
+# Installed as a plugin (mcpServers in plugin.json):
+claude --channels plugin:<plugin>@<marketplace>
+
+# Configured in .claude.json / .mcp.json — a development entry, so it needs
+# the development flag; plain --channels rejects it and drops every push:
 claude --dangerously-load-development-channels server:claude-peers
+```
 
-# Or just add to .mcp.json and use as regular MCP (no channel push, but tools work):
-# { "claude-peers": { "command": "bun", "args": ["./server.ts"] } }
+A repo-local `.mcp.json` on top of a user-scope or plugin install loads the
+server twice: the session registers as two peers (the second named as a
+subagent, `<name>-1`), and only one of them is the one Claude Code pushes to.
+`.mcp.json` is gitignored for that reason — don't commit one.
 
+```bash
 # CLI:
 bun cli.ts status
 bun cli.ts peers [hostname]

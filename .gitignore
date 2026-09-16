@@ -32,3 +32,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# local dev MCP wiring — a second copy of this server alongside a user-scope
+# or plugin install registers the session twice (see CLAUDE.md)
+.mcp.json
