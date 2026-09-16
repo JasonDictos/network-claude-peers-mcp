@@ -62,6 +62,9 @@ export function readCmdline(pid: number): string[] | null {
   }
 }
 
+/** The flag that authorizes a `server:<name>` channel entry. */
+const DEV_CHANNELS_FLAG = "--dangerously-load-development-channels";
+
 /**
  * Whether a Claude Code process loaded *this* MCP server as a channel.
  *
@@ -80,6 +83,11 @@ export function readCmdline(pid: number): string[] | null {
  * the config copy wins the connection, sees the plugin's entry in argv,
  * reports push working, drains the broker — and Claude Code discards every
  * notification with "server <name> not in --channels list for this session".
+ *
+ * The flag matters as much as the entry: `server:<name>` is a development
+ * form, so plain --channels rejects it ("not on the approved channels
+ * allowlist") while still leaving the token in argv. Matching the entry
+ * alone would read that launch as working, with the same result.
  */
 export function channelEnabled(
   claudePid: number,
@@ -93,7 +101,38 @@ export function channelEnabled(
   const entry = pluginRoot
     ? new RegExp(`^plugin:${escapeRe(pluginRoot.replace(/\/+$/, "").split("/").pop() ?? "")}(@|$)`)
     : new RegExp(`^server:${escapeRe(serverName)}$`);
-  return argv.some((a) => entry.test(a));
+  // A `server:` entry only authorizes us under the development flag — plain
+  // --channels refuses it, so the flag it arrived under is part of the match.
+  return channelArgs(argv).some((a) => entry.test(a.entry) && (!!pluginRoot || a.development));
+}
+
+/**
+ * Channel entries in a Claude Code argv, each tagged with whether the flag
+ * that introduced it was the development one.
+ *
+ * Both flags are variadic and also accept --flag=a,b, so an entry is read as
+ * belonging to the most recent channel flag; the next `--option` ends the run.
+ */
+function channelArgs(argv: string[]): { entry: string; development: boolean }[] {
+  const out: { entry: string; development: boolean }[] = [];
+  const push = (value: string, development: boolean) => {
+    for (const entry of value.split(",")) if (entry) out.push({ entry, development });
+  };
+  let flag: boolean | null = null; // development?, or null outside a channel flag
+  for (const arg of argv) {
+    const eq = arg.indexOf("=");
+    const head = eq < 0 ? arg : arg.slice(0, eq);
+    if (head === "--channels" || head === DEV_CHANNELS_FLAG) {
+      const development = head === DEV_CHANNELS_FLAG;
+      if (eq < 0) flag = development;
+      else {
+        push(arg.slice(eq + 1), development);
+        flag = null;
+      }
+    } else if (arg.startsWith("--")) flag = null;
+    else if (flag !== null) push(arg, flag);
+  }
+  return out;
 }
 
 /** Escape a string for literal use inside a RegExp. */

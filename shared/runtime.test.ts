@@ -58,6 +58,17 @@ describe("channelEnabled", () => {
     });
   });
 
+  // `server:` entries are development-only: plain --channels refuses them
+  // ("not on the approved channels allowlist (use
+  // --dangerously-load-development-channels for local dev)") and drops every
+  // push. Matching the bare token anywhere in argv reads that launch as
+  // working and drains the broker into a void.
+  test("false for a server: entry under plain --channels", () => {
+    withArgv(["--channels", "server:claude-peers"], (pid) => {
+      expect(channelEnabled(pid, "claude-peers", undefined)).toBe(false);
+    });
+  });
+
   test("false when the plugin's server sees only a server: entry", () => {
     withArgv(["--dangerously-load-development-channels", "server:claude-peers"], (pid) => {
       expect(channelEnabled(pid, "claude-peers", "/mkt/claude-peers")).toBe(false);
