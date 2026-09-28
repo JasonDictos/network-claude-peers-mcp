@@ -1,0 +1,26 @@
+# claude-peers <-> OpenClaw bridge. Install next to openclaw-gateway.service,
+# running as the same user so it shares the gateway's config and marker dir.
+#   sudo cp contrib/openclaw-bridge.service /etc/systemd/system/
+#   (edit User/paths/--name to match your setup)
+#   sudo systemctl daemon-reload && sudo systemctl enable --now openclaw-bridge
+[Unit]
+Description=claude-peers bridge for OpenClaw (peer messages start agent turns)
+After=network-online.target openclaw-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=claude-bot
+Group=claude-bot
+WorkingDirectory=/home/claude-bot
+Environment=HOME=/home/claude-bot
+# Same PATH as the gateway, so `openclaw` resolves the same way
+Environment=PATH=/home/claude-bot/.local/node24/bin:/home/claude-bot/.local/bin:/home/claude-bot/.bun/bin:/usr/local/bin:/usr/bin:/bin
+# Leave XDG_RUNTIME_DIR as the gateway has it (unset): the bridge's marker and
+# the agent's claude-peers servers must resolve the same directory.
+ExecStart=/home/claude-bot/.bun/bin/bun /path/to/claude-peers-mcp/openclaw-bridge.ts --name claudebot --cwd /home/claude-bot/.openclaw/workspace --agent main
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

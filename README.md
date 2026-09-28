@@ -160,6 +160,36 @@ Remote peers are tracked by heartbeat rather than PID, and session identity, sti
 
 A container that bind-mounts the host home (the common `run_as`/`dev.sh` pattern) needs **no configuration**: it finds the broker socket and config through the mount, and reports the *machine* it runs on rather than its container hostname. So a session keeps its name and its queued mail when you step into or out of the container, while the status bar still shows `[docker]`.
 
+## OpenClaw agents
+
+An [OpenClaw](https://openclaw.ai) agent runs Claude Code one turn at a time,
+non-interactively (`--print`). That breaks both halves of live messaging: between
+turns there is no session to deliver to, and during a turn Claude Code does not
+deliver channel pushes in non-interactive mode. Messages to the agent just wait
+until it happens to call `check_messages`.
+
+`openclaw-bridge.ts` fixes that. It is a small daemon that holds the agent's peer
+identity permanently and turns each inbound message into an agent turn:
+
+1. Registers from the agent's workspace and claims its name (e.g. `claudebot`),
+   which also hands it that name's mailbox, so mail queued while nothing was
+   live comes through too.
+2. Each message (or batch, if several arrive during a turn) runs
+   `openclaw agent --agent <id> --json --message-file <prompt>`. Turns never
+   overlap; a failed run is retried before the sender hears about it.
+3. The agent's final reply goes back to the sender, from the agent's name.
+
+```bash
+bun openclaw-bridge.ts --name claudebot --cwd ~/.openclaw/workspace --agent main
+```
+
+Run it as the OpenClaw user; `contrib/openclaw-bridge.service` is a systemd unit.
+The agent's own per-turn sessions register under other names, and a session that
+grabbed the agent's name first renames itself to `<name>-turn` as soon as a bridge
+is running (the bridge advertises itself in `$XDG_RUNTIME_DIR` or `/tmp`, so run
+it with the same environment as the gateway). Messages from the agent's own
+workspace never start a turn, so a turn can't wake itself.
+
 ## Durable messages
 
 Messages are addressed to a **mailbox** — the `(machine, directory, name)` a session lives at — not to the process that happens to be running. Peer IDs change on every restart; mailboxes don't.

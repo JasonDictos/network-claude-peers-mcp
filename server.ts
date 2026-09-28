@@ -36,6 +36,7 @@ import { brokerFetch, IS_REMOTE, BROKER_URL } from "./shared/client.ts";
 import { claudeKey, getRuntimeId, getParentPid, channelEnabled, argvScrubbed } from "./shared/runtime.ts";
 import { hostname } from "node:os";
 import { machineName, writeMachineMarker } from "./shared/config.ts";
+import { readBridgeMarker, stepAsideName } from "./shared/bridge.ts";
 
 // --- Configuration ---
 
@@ -173,6 +174,30 @@ async function register(): Promise<void> {
   myId = reg.id;
   myName = reg.name;
   log(`Registered as peer ${myName} (${myId})`);
+  await stepAsideForBridge();
+}
+
+/**
+ * If an OpenClaw bridge (openclaw-bridge.ts) speaks for this workspace under
+ * the name we hold, hand the name -- and its mailbox -- to the bridge. OpenClaw
+ * keeps its Claude Code process alive between turns, so without this a turn
+ * session that registered first keeps the name, and messages meant to wake
+ * the agent sit in a mailbox nothing reads. Checked on every heartbeat too,
+ * so a long-lived session yields when a bridge starts after it.
+ */
+async function stepAsideForBridge(): Promise<void> {
+  if (!myId || !myName) return;
+  const to = stepAsideName(readBridgeMarker(), { name: myName, cwd: myCwd, host: machineName() });
+  if (!to) return;
+  try {
+    const res = await brokerFetch<{ ok: boolean; name?: string; error?: string }>("/set-name", { id: myId, name: to });
+    if (res.ok) {
+      log(`Stepped aside for the OpenClaw bridge: renamed ${myName} -> ${res.name ?? to}`);
+      myName = res.name ?? to;
+    }
+  } catch {
+    // Non-critical: retried at the next heartbeat
+  }
 }
 
 /** The broker prunes peers it wrongly thinks are dead (e.g. after a laptop
@@ -697,6 +722,7 @@ async function main() {
     if (myId) {
       try {
         await brokerFetch("/heartbeat", { id: myId });
+        await stepAsideForBridge();
       } catch (e) {
         if (isUnknownPeerError(e)) {
           try {

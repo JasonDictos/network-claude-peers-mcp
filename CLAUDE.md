@@ -19,6 +19,7 @@ Peer discovery and messaging MCP channel for Claude Code instances.
 - `shared/hosts.ts` — Hostname matching (short/FQDN/IP), DNS resolution, local address discovery.
 - `shared/client.ts` — Broker transport: remote URL → unix socket → localhost TCP.
 - `shared/summarize.ts` — Auto-summary generation via gpt-5.4-nano.
+- `openclaw-bridge.ts` — Daemon that gives an OpenClaw agent a live peer identity: holds its name/mailbox and turns each inbound message into an `openclaw agent` turn, replying with the result. Pure logic in `shared/bridge.ts`; systemd unit in `contrib/`.
 - `cli.ts` — CLI utility for inspecting broker state. Also provides `whoami` and `statusline` (identifies the calling session by walking ancestor PIDs to match the peer's `claude_pid`).
 
 ## Running
