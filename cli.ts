@@ -174,8 +174,13 @@ switch (cmd) {
       process.exit(1);
     }
     try {
+      // Send as the Claude session this command runs inside, when there is
+      // one (like broadcast). A bare "cli" sender is not a peer, so nothing
+      // can answer it -- a reply from anyone, including an OpenClaw bridge
+      // that auto-replies, fails with 'No peer matches "cli"'.
+      const self = findSelf(await listAllPeers().catch(() => [] as Peer[]), process.cwd());
       const result = await brokerFetch<SendMessageResponse>("/send-message", {
-        from_id: "cli",
+        from_id: self?.id ?? "cli",
         to: target,
         text: msg,
       });
