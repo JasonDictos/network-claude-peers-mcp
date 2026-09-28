@@ -62,6 +62,24 @@ export function readCmdline(pid: number): string[] | null {
   }
 }
 
+/**
+ * Whether a process has overwritten its own argv in place.
+ *
+ * Node's `process.title = "..."` (and anything else that rewrites argv to hide
+ * its arguments -- OpenClaw launches Claude Code this way) writes the new
+ * title over the original argv area and NUL-fills the rest. /proc/<pid>/cmdline
+ * then reads as the title followed by a run of empty strings. A process that
+ * was simply started with no arguments ends in exactly one NUL, so the run of
+ * trailing NULs is what tells "scrubbed" apart from "genuinely bare".
+ */
+export function argvScrubbed(pid: number): boolean {
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`, "latin1").endsWith("\0\0");
+  } catch {
+    return false;
+  }
+}
+
 /** The flag that authorizes a `server:<name>` channel entry. */
 const DEV_CHANNELS_FLAG = "--dangerously-load-development-channels";
 
@@ -96,6 +114,11 @@ export function channelEnabled(
 ): boolean | null {
   const argv = readCmdline(claudePid);
   if (!argv) return null; // can't tell
+  // A scrubbed argv no longer carries the channel flags it was launched with,
+  // so reading it as "no channel entry" would switch push off for a session
+  // that has it -- and the broker would then hold every message for polling.
+  // That's what left claudebot@home [no-push] no matter how it was launched.
+  if (argvScrubbed(claudePid)) return null; // can't tell
   // A plugin's own name is the last segment of its root, and it is the name
   // the channel entry carries — not necessarily the MCP server's name.
   const entry = pluginRoot

@@ -1,5 +1,8 @@
 import { test, expect, describe } from "bun:test";
-import { channelEnabled, readCmdline } from "./runtime.ts";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { argvScrubbed, channelEnabled, readCmdline } from "./runtime.ts";
 
 describe("readCmdline", () => {
   test("reads this process's own argv", () => {
@@ -95,5 +98,58 @@ describe("channelEnabled", () => {
 
   test("null when the process is gone", () => {
     expect(channelEnabled(2 ** 30)).toBeNull();
+  });
+
+  // A genuinely bare launch must still read as "no channel" -- the scrub check
+  // below must not swallow it.
+  test("false for a bare launch with no arguments", () => {
+    const proc = Bun.spawn(["bash", "-c", "exec -a claude sleep 5"]);
+    try {
+      let argv: string[] | null = null;
+      for (let i = 0; i < 100 && argv?.[0] !== "claude"; i++) {
+        argv = readCmdline(proc.pid);
+        if (argv?.[0] !== "claude") Bun.sleepSync(10);
+      }
+      expect(argv).toEqual(["claude", "5"]);
+    } finally {
+      proc.kill();
+    }
+  });
+});
+
+// OpenClaw (via Node's process.title) overwrites Claude Code's argv in place:
+// the title, then NUL padding over where the real flags were. Reading that as
+// "no channel entry" switched push off for a session launched WITH the flags,
+// and the broker then held every message for polling (claudebot@home).
+describe("scrubbed argv", () => {
+  const dir = mkdtempSync(join(tmpdir(), "scrub-"));
+  const bin = join(dir, "scrub");
+  const src = join(dir, "scrub.c");
+  writeFileSync(src, `
+#include <string.h>
+#include <unistd.h>
+int main(int argc, char **argv) {
+  char *end = argv[argc - 1] + strlen(argv[argc - 1]);
+  memset(argv[0], 0, end - argv[0]);
+  strcpy(argv[0], "claude");
+  sleep(5);
+  return 0;
+}`);
+  const built = Bun.spawnSync(["cc", "-o", bin, src]).exitCode === 0;
+
+  test.skipIf(!built)("reads as can't-tell (null), not as no-push", () => {
+    const proc = Bun.spawn([bin, "--dangerously-load-development-channels", "server:claude-peers"]);
+    try {
+      for (let i = 0; i < 100 && !argvScrubbed(proc.pid); i++) Bun.sleepSync(10);
+      expect(argvScrubbed(proc.pid)).toBe(true);
+      expect(readCmdline(proc.pid)).toEqual(["claude"]);
+      expect(channelEnabled(proc.pid)).toBeNull();
+    } finally {
+      proc.kill();
+    }
+  });
+
+  test("a normal argv is not reported as scrubbed", () => {
+    expect(argvScrubbed(process.pid)).toBe(false);
   });
 });
