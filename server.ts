@@ -33,7 +33,7 @@ import {
   getRecentFiles,
 } from "./shared/summarize.ts";
 import { brokerFetch, IS_REMOTE, BROKER_URL } from "./shared/client.ts";
-import { claudeKey, getRuntimeId, getParentPid, channelEnabled } from "./shared/runtime.ts";
+import { claudeKey, getRuntimeId, getParentPid, channelEnabled, argvScrubbed } from "./shared/runtime.ts";
 import { hostname } from "node:os";
 import { machineName, writeMachineMarker } from "./shared/config.ts";
 
@@ -146,7 +146,18 @@ let pushDisabled = false;
 async function register(): Promise<void> {
   // Recomputed here (not just at startup) so a re-register after a broker
   // restart still reports this session's true capability
-  pushDisabled = !!process.ppid && channelEnabled(process.ppid) === false;
+  pushDisabled = !!process.ppid && (
+    channelEnabled(process.ppid) === false ||
+    // A scrubbed argv hides the channel flags, so it can't say whether push
+    // is on -- but a scrubbed launch with no terminal is a harness driving
+    // Claude Code with --print (OpenClaw does exactly this), and Claude Code
+    // does not deliver channel pushes in non-interactive mode: its debug log
+    // reads "pollChannel=false ... nonInteractive=true", and a pushed message
+    // never reached the model in three controlled runs on 2.1.89 and
+    // 2.1.282. Pushing there would take mail off the broker and drop it; left
+    // queued, the session still gets it through check_messages.
+    (argvScrubbed(process.ppid) && !getTty())
+  );
   const reg = await brokerFetch<RegisterResponse>("/register", {
     pid: process.pid,
     claude_pid: process.ppid || null,
