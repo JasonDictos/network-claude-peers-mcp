@@ -20,12 +20,15 @@ import type {
   PollMessagesRequest,
   PollMessagesResponse,
   SendMessageResponse,
+  BoundNameRequest,
+  BoundNameResponse,
   Peer,
   Message,
 } from "./shared/types.ts";
 import { generateName, childName, scopedName, repoBase } from "./shared/names.ts";
 import { resolveTarget, resolveMailbox, sessionKey, sessionKeyOf } from "./shared/resolve.ts";
 import { adoptOrphanedMail } from "./shared/mailbox.ts";
+import { boundName } from "./shared/bindings.ts";
 import type { Mailbox } from "./shared/resolve.ts";
 import { getRuntimeId } from "./shared/runtime.ts";
 import { loadConfig, isLoopbackBind, isLoopbackAddress, machineName, writeMachineMarker } from "./shared/config.ts";
@@ -715,6 +718,17 @@ function handleLog(body: { limit?: number; after_id?: number }): { messages: Mes
   return { messages };
 }
 
+/**
+ * The sticky name for a directory, for a session whose peer has not registered
+ * yet. The status bar asks for this when nothing in the roster matches it, so
+ * the name shows from the first render instead of after the session's next turn.
+ * Names held by live peers are withheld — see boundName().
+ */
+function handleBoundName(body: BoundNameRequest): BoundNameResponse {
+  const host = body.host || MY_HOST;
+  return { name: boundName(db, host, body.cwd, livePeers().map((p) => p.name)) };
+}
+
 function handlePollMessages(body: PollMessagesRequest): PollMessagesResponse | null {
   const peer = db.query("SELECT * FROM peers WHERE id = ?").get(body.id) as Peer | null;
   if (!peer) return null;
@@ -803,6 +817,8 @@ async function handleRequest(req: Request, trusted: boolean): Promise<Response> 
       }
       case "/pending":
         return Response.json(handlePending(body as { id: string }));
+      case "/bound-name":
+        return Response.json(handleBoundName(body as BoundNameRequest));
       case "/log":
         return Response.json(handleLog(body as { limit?: number; after_id?: number }));
       case "/unregister":

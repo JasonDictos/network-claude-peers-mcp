@@ -108,3 +108,14 @@ export interface PollMessagesRequest {
 export interface PollMessagesResponse {
   messages: Message[];
 }
+
+/** Ask the broker which name is bound to a (host, cwd) — see shared/bindings.ts. */
+export interface BoundNameRequest {
+  /** Defaults to the broker's own machine when omitted. */
+  host?: string | null;
+  cwd: string;
+}
+
+export interface BoundNameResponse {
+  name: string | null;
+}

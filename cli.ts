@@ -20,7 +20,7 @@
  */
 
 import { realpathSync } from "node:fs";
-import type { Peer, Message, SendMessageResponse } from "./shared/types.ts";
+import type { Peer, Message, SendMessageResponse, BoundNameResponse } from "./shared/types.ts";
 import { brokerFetch, BROKER_PORT, BROKER_URL, IS_REMOTE } from "./shared/client.ts";
 import { claudeKey, getParentPid, getRuntimeId } from "./shared/runtime.ts";
 import { sessionKey, resolveTarget } from "./shared/resolve.ts";
@@ -355,6 +355,22 @@ switch (cmd) {
       }
     } catch {
       // Broker down — no name
+    }
+
+    // A session's peer registers a couple of seconds after Claude Code starts,
+    // so the first renders match nothing in the roster and the bar comes up
+    // without a name. Claude Code re-renders on activity, not on a timer, so an
+    // idle session keeps the nameless bar until its next turn. The name is
+    // knowable before registration: ask the broker what name is bound to this
+    // directory. Only on the miss, so the common path costs nothing.
+    if (!name) {
+      try {
+        name =
+          (await brokerFetch<BoundNameResponse>("/bound-name", { host: machineName(), cwd }, 250))
+            .name ?? null;
+      } catch {
+        // Still nothing to show — render without the name segment
+      }
     }
 
     // Docker detection: /.dockerenv is the compose/docker marker; cgroup
