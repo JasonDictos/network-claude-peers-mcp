@@ -19,6 +19,7 @@
  *   bun cli.ts kill-broker         — Stop the broker daemon
  */
 
+import { realpathSync } from "node:fs";
 import type { Peer, Message, SendMessageResponse } from "./shared/types.ts";
 import { brokerFetch, BROKER_PORT, BROKER_URL, IS_REMOTE } from "./shared/client.ts";
 import { claudeKey, getParentPid, getRuntimeId } from "./shared/runtime.ts";
@@ -625,14 +626,43 @@ switch (cmd) {
     // Only restart the one this machine hosts.
     if (IS_REMOTE) {
       console.log(`Broker runs on ${BROKER_URL} — update and restart it there too.`);
-    } else if (before !== after) {
-      const lsof = Bun.spawnSync(["lsof", "-ti", `:${BROKER_PORT}`, "-sTCP:LISTEN"]);
-      const pids = new TextDecoder().decode(lsof.stdout).trim().split("\n").filter(Boolean);
-      for (const pid of pids) process.kill(parseInt(pid), "SIGTERM");
-      Bun.spawn(["setsid", process.execPath, `${repoDir}broker.ts`], {
-        stdio: ["ignore", "ignore", "ignore"],
-      }).unref();
-      console.log("Broker restarted on the new code.");
+    } else {
+      // Restart when the RUNNING broker's code differs from the checkout, not
+      // when the pull moved HEAD. A broker that predates the commit field
+      // (or isn't answering) reports no commit and counts as stale.
+      const head = out(git("rev-parse", "HEAD"));
+      // Same checkout reached by two paths (NFS vs local mount name) is not
+      // "another checkout": compare resolved paths, falling back to strings.
+      const samePath = (x: string, y: string) => {
+        try { return realpathSync(x) === realpathSync(y); } catch { return x === y; }
+      };
+      let running: string | null = null;
+      let runningDir: string | null = null;
+      try {
+        const h = await brokerFetch<{ commit?: string | null; dir?: string | null }>("/health");
+        running = h.commit ?? null;
+        runningDir = h.dir ?? null;
+      } catch {}
+      if (!head) {
+        // No .git (tarball / rsync without it): the broker reports null too,
+        // so unknown-vs-unknown would restart it on every run, forever.
+        console.log("Can't determine this checkout's commit (no git metadata) — not restarting the broker.");
+      } else if (runningDir && !samePath(runningDir, repoDir)) {
+        // Another checkout on this machine hosts the broker. Comparing commits
+        // across checkouts would make two of them take turns killing it.
+        console.log(`Broker is hosted by another checkout (${runningDir}) — leaving it alone. Run update from there.`);
+      } else if (running === head) {
+        console.log(`Broker already running ${head.slice(0, 7)}.`);
+      } else {
+        console.log(`Broker running ${running ? running.slice(0, 7) : "unknown/older code"}, checkout is ${head.slice(0, 7)} — restarting.`);
+        const lsof = Bun.spawnSync(["lsof", "-ti", `:${BROKER_PORT}`, "-sTCP:LISTEN"]);
+        const pids = new TextDecoder().decode(lsof.stdout).trim().split("\n").filter(Boolean);
+        for (const pid of pids) process.kill(parseInt(pid), "SIGTERM");
+        Bun.spawn(["setsid", process.execPath, `${repoDir}broker.ts`], {
+          stdio: ["ignore", "ignore", "ignore"],
+        }).unref();
+        console.log("Broker restarted on the new code.");
+      }
     }
 
     if (before !== after) {

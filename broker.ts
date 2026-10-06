@@ -47,6 +47,19 @@ const HEARTBEAT_STALE_MS = 60_000;
 // injects text into Claude sessions, so a network-facing bind MUST carry a
 // shared token — refuse to start rather than expose an open injection point.
 const { bind: BIND, token: TOKEN } = loadConfig();
+
+// The commit this process was started on, reported by /health. `cli.ts update`
+// compares it to the checkout to decide whether the broker needs a restart --
+// inferring that from "did the pull move HEAD" left a broker on stale code
+// after a local commit, or when it predated an earlier pull, while update
+// reported "Already up to date".
+// Its checkout dir rides along so update can tell "stale" from "a different
+// checkout on this machine hosts the broker" -- those must not fight.
+const BROKER_DIR = new URL("./", import.meta.url).pathname;
+const BROKER_COMMIT = (() => {
+  const r = Bun.spawnSync(["git", "-C", BROKER_DIR, "rev-parse", "HEAD"]);
+  return r.exitCode === 0 ? new TextDecoder().decode(r.stdout).trim() : null;
+})();
 if (!isLoopbackBind(BIND) && !TOKEN) {
   console.error(
     `[claude-peers broker] refusing to bind ${BIND} without a token.\n` +
@@ -756,7 +769,7 @@ async function handleRequest(req: Request, trusted: boolean): Promise<Response> 
 
   if (req.method !== "POST") {
     if (path === "/health") {
-      return Response.json({ status: "ok", peers: (selectAllPeers.all() as Peer[]).length });
+      return Response.json({ status: "ok", peers: (selectAllPeers.all() as Peer[]).length, commit: BROKER_COMMIT, dir: BROKER_DIR });
     }
     return new Response("claude-peers broker", { status: 200 });
   }
