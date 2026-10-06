@@ -620,6 +620,17 @@ switch (cmd) {
         console.log("Dependencies changed — running bun install");
         Bun.spawnSync([process.execPath, "install"], { cwd: repoDir, stdout: "inherit", stderr: "inherit" });
       }
+      // This process is still the PRE-pull cli.ts, so any change to update's
+      // own logic (e.g. the broker-restart guards below) would not apply on
+      // the very run that installs it. Hand off to the new code instead; its
+      // pull is a no-op, and it does the broker step with current logic.
+      if (out(git("diff", "--name-only", `${before}..${after}`, "--", "cli.ts", "shared/"))) {
+        console.log("update changed itself — continuing on the new code.");
+        const r = Bun.spawnSync([process.execPath, `${repoDir}cli.ts`, "update"], { stdout: "inherit", stderr: "inherit" });
+        // The child's pull moved nothing, so it won't print this itself.
+        console.log("Sessions keep running the old code until their MCP server restarts — /mcp reconnect, or start a new session.");
+        process.exit(r.exitCode ?? 1);
+      }
     }
 
     // The broker is long-lived, so it keeps running old code until restarted.
