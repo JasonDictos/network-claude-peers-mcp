@@ -234,21 +234,22 @@ bun cli.ts log -f
 
 ## Slash commands
 
-Drop these in `~/.claude/commands/` for `/peer-list`, `/peer-whoami`, `/peer-iam`, `/peer-broadcast`, and `/peer-log` in every session:
+`/peer-send`, `/peer-list`, `/peer-log`, `/peer-whoami`, `/peer-iam`, and
+`/peer-broadcast` are available in every session on a machine once they are
+installed:
 
-```markdown
-<!-- ~/.claude/commands/peer-list.md -->
----
-description: List Claude Code peers on the network
-argument-hint: [machine]
-allowed-tools: Bash(~/.bun/bin/bun ~/claude-peers-mcp/cli.ts:*)
----
-!`~/.bun/bin/bun ~/claude-peers-mcp/cli.ts peers $ARGUMENTS`
-
-Present the peers above as a compact table: name, machine, directory, summary.
+```bash
+bun cli.ts install-commands      # or just: bun cli.ts update
 ```
 
-The same pattern works for the others — swap `peers` for `whoami`, `iam $ARGUMENTS`, `broadcast - <<'EOF' … EOF`, or `log -n $ARGUMENTS`.
+They live in [`commands/`](commands/) and are installed into
+`~/.claude/commands/`. `update` reinstalls them on every run, so each machine's
+commands match its checkout — edit the template in `commands/`, never the
+installed copy, which is overwritten. A slash command runs in a bare shell with
+no repo context, so the templates carry `@@BUN@@` and `@@REPO@@` placeholders
+that install fills in with that machine's interpreter and checkout path.
+
+New sessions pick up a newly installed command; one already running does not.
 
 ## Status bar
 
@@ -293,7 +294,7 @@ It stops the MCP server when that process is reachable from where you run it, un
 bun cli.ts update      # on each machine
 ```
 
-Pulls, reinstalls dependencies only if they moved, and restarts the broker that machine hosts. Sessions pick up new code when their MCP server restarts (`/mcp` reconnect).
+Pulls, reinstalls dependencies only if they moved, installs the [slash commands](#slash-commands), and restarts the broker that machine hosts. Sessions pick up new code when their MCP server restarts (`/mcp` reconnect).
 
 ## Auto-summary (optional)
 

@@ -16,11 +16,13 @@
  *   bun cli.ts kill <name>         — Remove a peer (stops its MCP server when local)
  *   bun cli.ts network-setup       — Configure cross-machine peering (--show/--client)
  *   bun cli.ts update              — Pull latest code, reinstall deps, restart the broker
+ *   bun cli.ts install-commands    — Install the /peer-* slash commands for this machine
  *   bun cli.ts kill-broker         — Stop the broker daemon
  */
 
-import { realpathSync } from "node:fs";
+import { realpathSync, readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import type { Peer, Message, SendMessageResponse, BoundNameResponse } from "./shared/types.ts";
+import { renderCommand, commandAction, summarizeInstall, type CommandResult } from "./shared/commands.ts";
 import { brokerFetch, BROKER_PORT, BROKER_URL, IS_REMOTE } from "./shared/client.ts";
 import { claudeKey, getParentPid, getRuntimeId } from "./shared/runtime.ts";
 import { sessionKey, resolveTarget } from "./shared/resolve.ts";
@@ -119,6 +121,37 @@ function getGitBranch(cwd: string): string | null {
     // statusline must never crash over this, just omit the branch segment.
     return null;
   }
+}
+
+/**
+ * Install the repo's /peer-* slash commands into ~/.claude/commands.
+ *
+ * Called by `update` on every run so a machine that missed a command — or
+ * drifted from the checkout — is reconciled by the same one command that
+ * pulls the code. Inside a dev container ~/.claude is a symlink to the host
+ * home, so writing through $HOME lands in the right place either way.
+ */
+function installCommands(repoDir: string): string {
+  const srcDir = `${repoDir.replace(/\/+$/, "")}/commands`;
+  if (!existsSync(srcDir)) return summarizeInstall([]);
+
+  const destDir = `${process.env.HOME}/.claude/commands`;
+  mkdirSync(destDir, { recursive: true });
+
+  const results: CommandResult[] = [];
+  for (const file of readdirSync(srcDir).sort()) {
+    if (!file.endsWith(".md")) continue;
+    const rendered = renderCommand(readFileSync(`${srcDir}/${file}`, "utf8"), {
+      bun: process.execPath,
+      repo: repoDir,
+    });
+    const dest = `${destDir}/${file}`;
+    const existing = existsSync(dest) ? readFileSync(dest, "utf8") : null;
+    const action = commandAction(existing, rendered);
+    if (action !== "unchanged") writeFileSync(dest, rendered);
+    results.push({ name: file.replace(/\.md$/, ""), action });
+  }
+  return summarizeInstall(results);
 }
 
 const cmd = process.argv[2];
@@ -649,6 +682,11 @@ switch (cmd) {
       }
     }
 
+    // The /peer-* commands ship with the code, so reconcile them on every run
+    // — including when the pull moved nothing. That makes one command enough
+    // to fix a machine whose commands drifted from the checkout.
+    console.log(installCommands(repoDir));
+
     // The broker is long-lived, so it keeps running old code until restarted.
     // Only restart the one this machine hosts.
     if (IS_REMOTE) {
@@ -698,6 +736,15 @@ switch (cmd) {
     break;
   }
 
+  case "install-commands": {
+    // Same work update does, on its own — for a checkout that is already
+    // current, or a machine where you only want the commands refreshed.
+    const repoDir = new URL("./", import.meta.url).pathname;
+    console.log(installCommands(repoDir));
+    console.log(`Installed into ${process.env.HOME}/.claude/commands (new sessions pick them up).`);
+    break;
+  }
+
   case "kill-broker": {
     try {
       const health = await brokerFetch<{ status: string; peers: number }>("/health");
@@ -735,5 +782,6 @@ Usage:
   bun cli.ts kill <name|id|path> Remove a peer (stops its MCP server when local)
   bun cli.ts network-setup       Cross-machine peering (--show, --client <url> --token <t>)
   bun cli.ts update              Pull latest code, reinstall deps, restart the broker
+  bun cli.ts install-commands    Install the /peer-* slash commands for this machine
   bun cli.ts kill-broker         Stop the broker daemon`);
 }
