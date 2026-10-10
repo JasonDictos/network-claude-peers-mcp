@@ -217,9 +217,9 @@ const mcp = new Server(
     },
     instructions: `You are connected to the claude-peers network. Other Claude Code instances on this machine can see you and send you messages.
 
-Every peer has a human-readable name (like "goofy-joe") and an 8-char ID — the two are interchangeable as addresses. You can also address a peer by its directory path (e.g. "~/archiver-tools"): the broker matches it against each peer's working directory and git repo. If a path matches several peers, the send fails and returns the candidates so you can pick one by name.
+Every peer has a human-readable name — the directory it works in, like "archiver-tools" — and an 8-char ID — the two are interchangeable as addresses. You can also address a peer by its directory path (e.g. "~/archiver-tools"): the broker matches it against each peer's working directory and git repo. If a path matches several peers, the send fails and returns the candidates so you can pick one by name.
 
-A session running subagents appears as a group: the top-level session keeps the base name (goofy-joe) and its agents are suffixed (goofy-joe-1, goofy-joe-2). Path addressing resolves to the top-level session; use a suffixed name to reach a specific agent.
+A session running subagents appears as a group: the top-level session keeps the base name (archiver-tools) and its agents are suffixed (archiver-tools-1, archiver-tools-2). Path addressing resolves to the top-level session; use a suffixed name to reach a specific agent.
 
 Peers may live on different machines. list_peers reports each peer's Host, and a sender on another machine shows as name@host. Since the same directory can exist on several machines, qualify a path with the host when needed: "archiver:~/archiver-tools", or "archiver:" for that machine's session. A bare path that matches peers on multiple machines returns them as candidates.
 
@@ -261,7 +261,7 @@ const TOOLS = [
   {
     name: "send_message",
     description:
-      "Send a message to another Claude Code instance. Address it by peer name (e.g. \"goofy-joe\"), peer ID, or directory path (e.g. \"~/archiver-tools\" — matches the peer's working directory or git repo). The message is pushed into their session immediately via channel notification.",
+      "Send a message to another Claude Code instance. Address it by peer name (e.g. \"archiver-tools\"), peer ID, or directory path (e.g. \"~/archiver-tools\" — matches the peer's working directory or git repo). The message is pushed into their session immediately via channel notification.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -281,7 +281,7 @@ const TOOLS = [
   {
     name: "whoami",
     description:
-      "Get this instance's own identity on the peer network: name (e.g. \"goofy-joe\"), peer ID, working directory, git repo, and current summary. Use the name when introducing yourself to other peers or rendering status.",
+      "Get this instance's own identity on the peer network: name (e.g. \"archiver-tools\"), peer ID, working directory, git repo, and current summary. Use the name when introducing yourself to other peers or rendering status.",
     inputSchema: {
       type: "object" as const,
       properties: {},
