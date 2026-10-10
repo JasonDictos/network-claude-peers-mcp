@@ -74,32 +74,22 @@ describe("repoBase", () => {
 });
 
 describe("scopedName", () => {
-  test("is the repo plus a person token", () => {
-    const name = scopedName("libeen-cpp", new Set());
-    expect(["libeen-cpp-dude", "libeen-cpp-dudette"]).toContain(name);
+  test("is just the repo name", () => {
+    expect(scopedName("libeen-cpp", new Set())).toBe("libeen-cpp");
   });
 
-  test("a second session in the same repo takes the other token", () => {
-    const name = scopedName("libeen-cpp", new Set(["libeen-cpp-dude"]));
-    expect(name).toBe("libeen-cpp-dudette");
+  test("a second session in the same repo takes a number", () => {
+    expect(scopedName("libeen-cpp", new Set(["libeen-cpp"]))).toBe("libeen-cpp-2");
   });
 
-  test("further sessions take low numbers", () => {
-    const taken = new Set(["libeen-cpp-dude", "libeen-cpp-dudette"]);
-    const name = scopedName("libeen-cpp", taken);
-    expect(name).toMatch(/^libeen-cpp-(dude|dudette)-2$/);
+  test("numbers start at 2, leaving -1 to the primary's first agent", () => {
+    const taken = new Set(["libeen-cpp", "libeen-cpp-2"]);
+    expect(scopedName("libeen-cpp", taken)).toBe("libeen-cpp-3");
   });
 
-  test("numbers stay in the 2-10 range before falling back", () => {
-    const taken = new Set(["libeen-cpp-dude", "libeen-cpp-dudette"]);
-    for (let i = 2; i <= 10; i++) {
-      taken.add(`libeen-cpp-dude-${i}`);
-      taken.add(`libeen-cpp-dudette-${i}`);
-    }
-    const name = scopedName("libeen-cpp", taken);
-    // exhausted the numbers -> repo-scoped adjective-noun, still unique
-    expect(name).toMatch(/^libeen-cpp-[a-z]+-[a-z]+$/);
-    expect(taken.has(name)).toBe(false);
+  test("steps over a number an agent peer already holds", () => {
+    const taken = new Set(["libeen-cpp", "libeen-cpp-2", "libeen-cpp-3"]);
+    expect(scopedName("libeen-cpp", taken)).toBe("libeen-cpp-4");
   });
 
   test("every generated name is valid for rename validation ([a-z0-9-])", () => {
@@ -112,9 +102,12 @@ describe("scopedName", () => {
     }
   });
 
-  test("both genders occur across many repos", () => {
-    const seen = new Set<string>();
-    for (let i = 0; i < 60; i++) seen.add(scopedName(`repo${i}`, new Set()).split("-").pop()!);
-    expect(seen.size).toBe(2);
+  test("carries no person token", () => {
+    const taken = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      const name = scopedName("een-ports", taken);
+      expect(name).not.toMatch(/dude/);
+      taken.add(name);
+    }
   });
 });

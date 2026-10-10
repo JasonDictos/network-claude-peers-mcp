@@ -32,7 +32,7 @@ describe("boundName", () => {
   });
 
   test("null for a binding that belongs to another host", () => {
-    bind("archiver", CWD, "raposa-custodian-dude");
+    bind("archiver", CWD, "raposa-custodian");
     expect(boundName(db, HOST, CWD)).toBeNull();
   });
 

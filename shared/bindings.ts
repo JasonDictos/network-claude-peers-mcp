@@ -21,9 +21,9 @@ import type { Database } from "bun:sqlite";
  *
  * The `taken` guard matters: sticky names are only reused when free, so if a
  * co-resident session already holds this directory's name, the session being
- * rendered will be given a different one (`-dudette`, `-2`). Returning the
- * bound name then would briefly show a name belonging to someone else, which
- * is worse than showing none.
+ * rendered will be given a different one (`-2`). Returning the bound name
+ * then would briefly show a name belonging to someone else, which is worse
+ * than showing none.
  */
 export function boundName(
   db: Database,

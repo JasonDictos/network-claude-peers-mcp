@@ -11,7 +11,7 @@ describe("isLoopback", () => {
   // The agent's per-turn Claude Code sessions run in the same workspace on
   // the same host. Bridging their messages would let a turn wake itself.
   test("a session in the agent's own workspace on the same host", () => {
-    expect(isLoopback({ id: "t1", name: "workspace-dude", host: "home", cwd: self.cwd }, "t1", self)).toBe(true);
+    expect(isLoopback({ id: "t1", name: "workspace", host: "home", cwd: self.cwd }, "t1", self)).toBe(true);
   });
 
   test("same workspace path on a different host is someone else", () => {
@@ -109,7 +109,7 @@ describe("stepAsideName", () => {
   });
   test("no marker, other name, other workspace or host: keep the name", () => {
     expect(stepAsideName(null, { name: "claudebot", cwd: "/w", host: "home" })).toBeNull();
-    expect(stepAsideName(marker, { name: "workspace-dude", cwd: "/w", host: "home" })).toBeNull();
+    expect(stepAsideName(marker, { name: "workspace", cwd: "/w", host: "home" })).toBeNull();
     expect(stepAsideName(marker, { name: "claudebot", cwd: "/x", host: "home" })).toBeNull();
     expect(stepAsideName(marker, { name: "claudebot", cwd: "/w", host: "desk" })).toBeNull();
   });

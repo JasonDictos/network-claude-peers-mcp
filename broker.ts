@@ -484,8 +484,8 @@ function handleRegister(body: RegisterRequest): RegisterResponse {
   );
 
   // A returning session can draw a DIFFERENT name for the same directory: the
-  // sticky name may be held by a co-resident session, so it lands on
-  // "-dudette" instead of "-dude" (or the reverse once that session exits).
+  // sticky name may be held by a co-resident session, so it lands on "repo-2"
+  // instead of "repo" (or back on "repo" once that session exits).
   // The mailbox key is (name, host, cwd), so mail addressed to the previous
   // name is stranded — still delivered = 0, but nothing will ever select it
   // again, which quietly breaks the promise that mail outlives a session.
@@ -832,6 +832,35 @@ async function handleRequest(req: Request, trusted: boolean): Promise<Response> 
     return Response.json({ error: msg }, { status: 500 });
   }
 }
+
+/**
+ * Retire the old `-dude` / `-dudette` names.
+ *
+ * Runs after the prepared statements exist, since the rename path uses them.
+ * Renaming through handleSetName carries the mailbox and agent peers along,
+ * so a live session is renamed without stranding its mail.
+ */
+function retireNames() {
+  const retired = /-(dude|dudette)(-\d+)?$/;
+  const alive = (db.query("SELECT * FROM peers WHERE name != ''").all() as Peer[]).filter(
+    isPeerAlive
+  );
+  // Primaries only — an agent's name follows its primary's
+  for (const p of alive.filter((p) => isPrimary(p, alive) && retired.test(p.name))) {
+    const want = scopedName(repoBase(p.cwd, p.git_root), takenNames());
+    const r = handleSetName({ id: p.id, name: want });
+    if (!r.ok) console.error(`[broker] could not rename ${p.name}: ${r.error}`);
+  }
+  // Bindings for directories with no live peer have nobody to rename; drop
+  // them so the next session there draws a current name
+  db.run(
+    `DELETE FROM name_bindings
+      WHERE name GLOB '*-dude' OR name GLOB '*-dudette'
+         OR name GLOB '*-dude-[0-9]*' OR name GLOB '*-dudette-[0-9]*'`
+  );
+}
+
+retireNames();
 
 // TCP: host-local clients, and peers on other machines when BIND is a
 // network address. Loopback callers are trusted; remote callers need the

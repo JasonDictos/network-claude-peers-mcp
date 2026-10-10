@@ -34,67 +34,67 @@ const namesNow = () =>
   (db.query("SELECT to_name FROM messages ORDER BY id").all() as { to_name: string }[]).map((r) => r.to_name);
 
 describe("adoptOrphanedMail", () => {
-  // The bug this exists for: a session came back as -dude after being -dudette,
-  // which moved its mailbox key and stranded mail nothing would ever select.
+  // The bug this exists for: a session came back as "repo" after being
+  // "repo-2", moving its mailbox key and stranding mail nothing would select.
   test("adopts mail left for a dead earlier name of the same directory", () => {
-    put("een-ports-dudette");
-    const n = adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports-dude", heldByLivePeers: [] });
+    put("een-ports-2");
+    const n = adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports", heldByLivePeers: [] });
     expect(n).toBe(1);
-    expect(namesNow()).toEqual(["een-ports-dude"]);
+    expect(namesNow()).toEqual(["een-ports"]);
   });
 
   test("never takes mail addressed to a name a live peer still holds", () => {
-    put("een-ports-dudette");
+    put("een-ports-2");
     const n = adoptOrphanedMail(db, {
       host: HOST,
       cwd: CWD,
-      name: "een-ports-dude",
-      heldByLivePeers: ["een-ports-dudette"],
+      name: "een-ports",
+      heldByLivePeers: ["een-ports-2"],
     });
     expect(n).toBe(0);
-    expect(namesNow()).toEqual(["een-ports-dudette"]);
+    expect(namesNow()).toEqual(["een-ports-2"]);
   });
 
   test("leaves already-delivered mail alone", () => {
-    put("een-ports-dudette", { delivered: 1 });
-    expect(adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports-dude", heldByLivePeers: [] })).toBe(0);
-    expect(namesNow()).toEqual(["een-ports-dudette"]);
+    put("een-ports-2", { delivered: 1 });
+    expect(adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports", heldByLivePeers: [] })).toBe(0);
+    expect(namesNow()).toEqual(["een-ports-2"]);
   });
 
   test("does not reach into another directory", () => {
     put("libeen-cpp-guy", { to_cwd: "/home/jason/libeen-cpp" });
-    expect(adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports-dude", heldByLivePeers: [] })).toBe(0);
+    expect(adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports", heldByLivePeers: [] })).toBe(0);
     expect(namesNow()).toEqual(["libeen-cpp-guy"]);
   });
 
   test("does not reach onto another host with the same path", () => {
-    put("een-ports-dude", { to_host: "archiver" });
-    expect(adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports-dude", heldByLivePeers: [] })).toBe(0);
+    put("een-ports", { to_host: "archiver" });
+    expect(adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports", heldByLivePeers: [] })).toBe(0);
   });
 
   test("is a no-op for mail already addressed to us", () => {
-    put("een-ports-dude");
-    expect(adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports-dude", heldByLivePeers: [] })).toBe(0);
-    expect(namesNow()).toEqual(["een-ports-dude"]);
+    put("een-ports");
+    expect(adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports", heldByLivePeers: [] })).toBe(0);
+    expect(namesNow()).toEqual(["een-ports"]);
   });
 
   test("ignores rows with no mailbox name (legacy id-addressed mail)", () => {
     put("");
-    expect(adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports-dude", heldByLivePeers: [] })).toBe(0);
+    expect(adoptOrphanedMail(db, { host: HOST, cwd: CWD, name: "een-ports", heldByLivePeers: [] })).toBe(0);
     expect(namesNow()).toEqual([""]);
   });
 
   test("adopts several strandings at once, sparing the live sibling", () => {
-    put("een-ports-dude-2");
-    put("een-ports-dudette");
+    put("een-ports-3");
+    put("een-ports-2");
     put("een-ports-sibling");
     const n = adoptOrphanedMail(db, {
       host: HOST,
       cwd: CWD,
-      name: "een-ports-dude",
+      name: "een-ports",
       heldByLivePeers: ["een-ports-sibling"],
     });
     expect(n).toBe(2);
-    expect(namesNow()).toEqual(["een-ports-dude", "een-ports-dude", "een-ports-sibling"]);
+    expect(namesNow()).toEqual(["een-ports", "een-ports", "een-ports-sibling"]);
   });
 });

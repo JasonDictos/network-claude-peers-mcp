@@ -5,8 +5,8 @@
  * id, so it outlives the registration it was sent to. The weak point is the
  * name: a returning session does not always draw the same one. The sticky
  * name for a directory may be held by a co-resident session, so the session
- * lands on "repo-dudette" instead of "repo-dude" (or the reverse, once that
- * other session exits). When that happens the mailbox key changes and mail
+ * lands on "repo-2" instead of "repo" (or back on "repo", once that other
+ * session exits). When that happens the mailbox key changes and mail
  * addressed to the previous name is stranded: still undelivered, but nothing
  * will ever select it again.
  */
@@ -30,7 +30,7 @@ export interface AdoptArgs {
  *
  * Scoped to one (host, cwd), and never takes mail addressed to a name a live
  * peer still holds — so two sessions sharing a directory keep separate
- * mailboxes, which is the whole point of the -dude/-dudette split.
+ * mailboxes.
  */
 export function adoptOrphanedMail(db: Database, args: AdoptArgs): number {
   const { host, cwd, name, heldByLivePeers } = args;
