@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { generateName, childName, scopedName, repoBase, ADJECTIVES, NOUNS } from "./names.ts";
+import { generateName, childName, scopedName, repoBase, isRandomName, ADJECTIVES, NOUNS } from "./names.ts";
 
 describe("childName", () => {
   test("first agent gets -1", () => {
@@ -111,3 +111,33 @@ describe("scopedName", () => {
     }
   });
 });
+
+describe("isRandomName", () => {
+  test("recognizes a name from the legacy adjective-noun pool", () => {
+    expect(isRandomName("lively-max")).toBe(true);
+    expect(isRandomName("spiffy-gus")).toBe(true);
+    expect(isRandomName("dizzy-mabel")).toBe(true);
+  });
+
+  test("recognizes a numbered one", () => {
+    expect(isRandomName("lively-max-2")).toBe(true);
+  });
+
+  test("leaves a hand-picked name alone", () => {
+    for (const name of ["libeen-cpp-guy", "archiver-tools-worker", "telegram-bot", "home-bot"]) {
+      expect(isRandomName(name)).toBe(false);
+    }
+  });
+
+  test("leaves a directory name alone, even a two-word one", () => {
+    for (const name of ["dhash-daemon", "claude-bot", "claude-bot-2", "een-ports"]) {
+      expect(isRandomName(name)).toBe(false);
+    }
+  });
+
+  test("needs both halves, in order, from the pools", () => {
+    expect(isRandomName("max-lively")).toBe(false);
+    expect(isRandomName("lively")).toBe(false);
+    expect(isRandomName("lively-max-extra")).toBe(false);
+  });
+})

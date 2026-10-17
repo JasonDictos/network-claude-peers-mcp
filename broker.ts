@@ -25,7 +25,7 @@ import type {
   Peer,
   Message,
 } from "./shared/types.ts";
-import { generateName, childName, scopedName, repoBase } from "./shared/names.ts";
+import { generateName, childName, scopedName, repoBase, isRandomName } from "./shared/names.ts";
 import { resolveTarget, resolveMailbox, sessionKey, sessionKeyOf } from "./shared/resolve.ts";
 import { adoptOrphanedMail } from "./shared/mailbox.ts";
 import { boundName } from "./shared/bindings.ts";
@@ -834,30 +834,37 @@ async function handleRequest(req: Request, trusted: boolean): Promise<Response> 
 }
 
 /**
- * Retire the old `-dude` / `-dudette` names.
+ * Retire names the broker no longer issues: the old `-dude` / `-dudette`
+ * tokens and the adjective-noun pool, both of which predate directory names
+ * and keep coming back through name_bindings. An `iam` rename is left alone.
  *
  * Runs after the prepared statements exist, since the rename path uses them.
  * Renaming through handleSetName carries the mailbox and agent peers along,
  * so a live session is renamed without stranding its mail.
  */
 function retireNames() {
-  const retired = /-(dude|dudette)(-\d+)?$/;
+  const retired = (name: string) => /-(dude|dudette)(-\d+)?$/.test(name) || isRandomName(name);
   const alive = (db.query("SELECT * FROM peers WHERE name != ''").all() as Peer[]).filter(
     isPeerAlive
   );
   // Primaries only — an agent's name follows its primary's
-  for (const p of alive.filter((p) => isPrimary(p, alive) && retired.test(p.name))) {
+  for (const p of alive.filter((p) => isPrimary(p, alive) && retired(p.name))) {
     const want = scopedName(repoBase(p.cwd, p.git_root), takenNames());
     const r = handleSetName({ id: p.id, name: want });
     if (!r.ok) console.error(`[broker] could not rename ${p.name}: ${r.error}`);
   }
   // Bindings for directories with no live peer have nobody to rename; drop
   // them so the next session there draws a current name
-  db.run(
-    `DELETE FROM name_bindings
-      WHERE name GLOB '*-dude' OR name GLOB '*-dudette'
-         OR name GLOB '*-dude-[0-9]*' OR name GLOB '*-dudette-[0-9]*'`
-  );
+  const bindings = db
+    .query("SELECT host, cwd, name FROM name_bindings")
+    .all() as { host: string; cwd: string; name: string }[];
+  for (const b of bindings.filter((b) => retired(b.name))) {
+    db.run("DELETE FROM name_bindings WHERE host = ? AND cwd = ? AND name = ?", [
+      b.host,
+      b.cwd,
+      b.name,
+    ]);
+  }
 }
 
 retireNames();

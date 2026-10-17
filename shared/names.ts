@@ -40,6 +40,20 @@ export function scopedName(base: string, taken: Set<string>): string {
   }
 }
 
+/**
+ * Whether a name came from the adjective-noun pool rather than a directory.
+ *
+ * Tells a name the broker made up from one a human chose, so the old random
+ * names can be retired without touching an `iam` rename.
+ */
+export function isRandomName(name: string): boolean {
+  const parts = name.split("-");
+  if (parts.length === 3 && !/^\d+$/.test(parts[2]!)) return false;
+  if (parts.length < 2 || parts.length > 3) return false;
+  return (ADJECTIVES as readonly string[]).includes(parts[0]!) &&
+    (NOUNS as readonly string[]).includes(parts[1]!);
+}
+
 function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
 }
