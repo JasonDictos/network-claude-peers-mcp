@@ -26,7 +26,7 @@ import { renderCommand, commandAction, summarizeInstall, type CommandResult } fr
 import { brokerFetch, BROKER_PORT, BROKER_URL, IS_REMOTE } from "./shared/client.ts";
 import { claudeKey, getParentPid, getRuntimeId } from "./shared/runtime.ts";
 import { sessionKey, resolveTarget } from "./shared/resolve.ts";
-import { loadConfig, saveConfig, generateToken, CONFIG_PATH, machineName, accountEmail } from "./shared/config.ts";
+import { loadConfig, saveConfig, generateToken, CONFIG_PATH, machineName, accountEmail, hostHome } from "./shared/config.ts";
 import { hostMatches, resolveHost, localAddresses } from "./shared/hosts.ts";
 import { hostname, networkInterfaces } from "node:os";
 
@@ -685,12 +685,23 @@ switch (cmd) {
     // The /peer-* commands ship with the code, so reconcile them on every run
     // — including when the pull moved nothing. That makes one command enough
     // to fix a machine whose commands drifted from the checkout.
-    console.log(installCommands(repoDir));
+    try {
+      console.log(installCommands(repoDir));
+    } catch (e) {
+      // Not worth abandoning the code and broker steps over
+      console.error(`commands: not installed (${e instanceof Error ? e.message : e})`);
+    }
 
     // The broker is long-lived, so it keeps running old code until restarted.
     // Only restart the one this machine hosts.
+    const hh = hostHome();
     if (IS_REMOTE) {
       console.log(`Broker runs on ${BROKER_URL} — update and restart it there too.`);
+    } else if (hh && hh !== process.env.HOME) {
+      // In a dev container the broker's socket and db live in the host home,
+      // and a broker started here would bind the container's loopback, cutting
+      // off every peer on another machine.
+      console.log(`Broker belongs to the host (${hh}) — run update there to restart it.`);
     } else {
       // Restart when the RUNNING broker's code differs from the checkout, not
       // when the pull moved HEAD. A broker that predates the commit field
@@ -726,7 +737,25 @@ switch (cmd) {
         Bun.spawn(["setsid", process.execPath, `${repoDir}broker.ts`], {
           stdio: ["ignore", "ignore", "ignore"],
         }).unref();
-        console.log("Broker restarted on the new code.");
+        // Confirm it, rather than reporting a restart that did not happen:
+        // with no lsof the old broker is never signalled, and the replacement
+        // then dies on the port the old one still holds.
+        let now: string | null = null;
+        for (let i = 0; i < 20 && now !== head; i++) {
+          await Bun.sleep(250);
+          try {
+            now = (await brokerFetch<{ commit?: string | null }>("/health")).commit ?? null;
+          } catch {}
+        }
+        if (now === head) {
+          console.log("Broker restarted on the new code.");
+        } else {
+          console.error(
+            `Broker still reports ${now ? now.slice(0, 7) : "nothing"} — restart did not take.` +
+              (pids.length ? "" : `\n(nothing was listening on :${BROKER_PORT} to stop — is lsof installed?)`)
+          );
+          process.exitCode = 1;
+        }
       }
     }
 
@@ -740,7 +769,12 @@ switch (cmd) {
     // Same work update does, on its own — for a checkout that is already
     // current, or a machine where you only want the commands refreshed.
     const repoDir = new URL("./", import.meta.url).pathname;
-    console.log(installCommands(repoDir));
+    try {
+      console.log(installCommands(repoDir));
+    } catch (e) {
+      // Not worth abandoning the code and broker steps over
+      console.error(`commands: not installed (${e instanceof Error ? e.message : e})`);
+    }
     console.log(`Installed into ${process.env.HOME}/.claude/commands (new sessions pick them up).`);
     break;
   }
