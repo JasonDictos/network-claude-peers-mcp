@@ -8,7 +8,8 @@
  *   bun cli.ts status              — Show broker status and all peers
  *   bun cli.ts peers               — List all peers
  *   bun cli.ts send <target> <msg> — Send a message (target: name, ID, or path)
- *   bun cli.ts broadcast <msg>     — Send a message to every peer (one per session)
+ *   bun cli.ts broadcast [grp] <msg> — Send to every peer, or to one group
+ *   bun cli.ts group [name] [peers]  — List, create or replace a peer group
  *   bun cli.ts whoami              — Show this session's peer name and ID
  *   bun cli.ts iam <name>          — Rename this session's peer
  *   bun cli.ts statusline          — Statusline command (reads Claude Code JSON on stdin)
@@ -20,15 +21,22 @@
  *   bun cli.ts kill-broker         — Stop the broker daemon
  */
 
-import { realpathSync, readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import type { Peer, Message, SendMessageResponse, BoundNameResponse } from "./shared/types.ts";
+import { realpathSync, readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from "node:fs";
+import type {
+  Peer,
+  Message,
+  SendMessageResponse,
+  BoundNameResponse,
+  GroupDelivery,
+} from "./shared/types.ts";
 import { renderCommand, commandAction, summarizeInstall, type CommandResult } from "./shared/commands.ts";
 import { brokerFetch, BROKER_PORT, BROKER_URL, IS_REMOTE } from "./shared/client.ts";
 import { claudeKey, getParentPid, getRuntimeId } from "./shared/runtime.ts";
 import { sessionKey, resolveTarget } from "./shared/resolve.ts";
+import { broadcastScope, groupNameError, normalizeGroupName, type Group } from "./shared/groups.ts";
 import { loadConfig, saveConfig, generateToken, CONFIG_PATH, machineName, accountEmail, hostHome } from "./shared/config.ts";
 import { hostMatches, resolveHost, localAddresses } from "./shared/hosts.ts";
-import { hostname, networkInterfaces } from "node:os";
+import { hostname, networkInterfaces, tmpdir } from "node:os";
 
 function listAllPeers(timeoutMs = 3000): Promise<Peer[]> {
   return brokerFetch<Peer[]>("/list-peers", { scope: "machine", cwd: "/", git_root: null }, timeoutMs);
@@ -102,11 +110,84 @@ function findSelf(peers: Peer[], cwd: string): Peer | null {
  *   run make && make install; don't ask
  *   EOF
  */
-async function messageFromArgsOrStdin(args: string[]): Promise<string> {
+async function messageFromArgsOrStdin(args: string[], hint = "message"): Promise<string> {
   const joined = args.join(" ").trim();
   if (joined && joined !== "-") return joined;
+  // No message and nothing piped in: a terminal gets an editor rather than a
+  // read that hangs on an idle tty. Longer things — a story for a group —
+  // want a buffer anyway.
+  if (!joined && process.stdin.isTTY) return messageFromEditor(hint);
   const stdin = (await Bun.stdin.text()).trim();
   return stdin;
+}
+
+/**
+ * Compose a message in $EDITOR, as git does for a commit. Comment lines are
+ * stripped, and saving nothing aborts the send.
+ */
+function messageFromEditor(hint: string): string {
+  const editor = process.env.VISUAL || process.env.EDITOR || "vi";
+  const file = `${tmpdir()}/claude-peers-${process.pid}.md`;
+  writeFileSync(
+    file,
+    `\n# ${hint}\n# Lines starting with # are ignored. Save nothing to abort.\n`
+  );
+  try {
+    const proc = Bun.spawnSync([...editor.split(/\s+/), file], {
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    if (proc.exitCode !== 0) {
+      console.error(`${editor} exited ${proc.exitCode} — nothing sent.`);
+      return "";
+    }
+    return readFileSync(file, "utf8")
+      .split("\n")
+      .filter((line) => !line.startsWith("#"))
+      .join("\n")
+      .trim();
+  } catch (e) {
+    console.error(`Could not run ${editor}: ${e instanceof Error ? e.message : String(e)}`);
+    return "";
+  } finally {
+    try {
+      unlinkSync(file);
+    } catch {
+      // Already gone — the editor may have replaced it
+    }
+  }
+}
+
+/** Per-member results of a fan-out, in the shape broadcast prints. */
+function printFanout(group: { name: string; deliveries: GroupDelivery[] }): number {
+  let sent = 0;
+  for (const d of group.deliveries) {
+    const who = d.to?.name || d.member;
+    if (d.skipped === "self") {
+      console.log(`-- ${who} (you)`);
+    } else if (d.skipped === "duplicate") {
+      console.log(`-- ${who} (already covered by another member)`);
+    } else if (!d.ok) {
+      console.log(`!! ${d.member}: ${d.error}`);
+    } else if (d.queued_offline) {
+      sent++;
+      console.log(`-> ${who} (offline — queued for its mailbox)`);
+    } else if (d.recipient_no_push) {
+      sent++;
+      console.log(`-> ${who} (queued — that session has no channel listener)`);
+    } else {
+      sent++;
+      console.log(`-> ${who}`);
+    }
+  }
+  console.log(`Sent to ${sent} of ${group.deliveries.length} member(s) of ${group.name}.`);
+  return sent;
+}
+
+/** Groups the broker knows, and the ones a given peer belongs to. */
+function fetchGroups(peerId?: string): Promise<{ groups: Group[]; memberships: string[] }> {
+  return brokerFetch<{ groups: Group[]; memberships: string[] }>("/groups", { peer_id: peerId });
 }
 
 function getGitBranch(cwd: string): string | null {
@@ -202,9 +283,11 @@ switch (cmd) {
 
   case "send": {
     const target = process.argv[3];
-    const msg = target ? await messageFromArgsOrStdin(process.argv.slice(4)) : "";
+    const msg = target
+      ? await messageFromArgsOrStdin(process.argv.slice(4), `Message to ${target}`)
+      : "";
     if (!target || !msg) {
-      console.error("Usage: bun cli.ts send <name|id|path> <message>  (or pipe the message on stdin)");
+      console.error("Usage: bun cli.ts send <name|id|path|group> <message>  (or pipe the message on stdin)");
       process.exit(1);
     }
     try {
@@ -218,7 +301,10 @@ switch (cmd) {
         to: target,
         text: msg,
       });
-      if (result.ok) {
+      if (result.group) {
+        printFanout(result.group);
+        if (!result.ok && result.error) console.error(result.error);
+      } else if (result.ok) {
         console.log(
           result.queued_offline
             ? `No live session for "${target}" — queued for ${result.to?.name} (delivered when it returns)`
@@ -272,16 +358,120 @@ switch (cmd) {
     break;
   }
 
-  case "broadcast": {
-    const msg = await messageFromArgsOrStdin(process.argv.slice(3));
-    if (!msg) {
-      console.error("Usage: bun cli.ts broadcast <message>  (or pipe the message on stdin)");
+  case "group": {
+    const sub = process.argv[3];
+    try {
+      if (!sub) {
+        const { groups } = await fetchGroups();
+        if (groups.length === 0) {
+          console.log("No groups. Create one: bun cli.ts group <name> <peer> <peer> ...");
+          break;
+        }
+        for (const g of groups) console.log(`${g.name}: ${g.members.join(", ")}`);
+        break;
+      }
+
+      if (sub === "rm") {
+        const name = process.argv[4];
+        if (!name) {
+          console.error("Usage: bun cli.ts group rm <name>");
+          process.exit(1);
+        }
+        const result = await brokerFetch<{ ok: boolean; existed: boolean }>("/delete-group", {
+          name,
+        });
+        console.log(
+          result.existed ? `Deleted group ${normalizeGroupName(name)}.` : `No group named "${name}".`
+        );
+        break;
+      }
+
+      const members = process.argv.slice(4);
+      if (members.length === 0) {
+        // A bare name shows that group rather than erroring — "what's in it?"
+        const { groups } = await fetchGroups();
+        const group = groups.find((g) => g.name === normalizeGroupName(sub));
+        if (group) {
+          console.log(`${group.name}: ${group.members.join(", ")}`);
+          break;
+        }
+        console.error(`No group named "${sub}". Create it: bun cli.ts group ${sub} <peer> <peer> ...`);
+        process.exit(1);
+      }
+
+      const nameError = groupNameError(sub);
+      if (nameError) {
+        console.error(nameError);
+        process.exit(1);
+      }
+      const result = await brokerFetch<{
+        ok: boolean;
+        error?: string;
+        group?: Group;
+        unknown?: string[];
+      }>("/set-group", { name: sub, members });
+      if (!result.ok || !result.group) {
+        console.error(`Failed: ${result.error}`);
+        process.exit(1);
+      }
+      console.log(`${result.group.name}: ${result.group.members.join(", ")}`);
+      if (result.unknown) {
+        console.log(`Matching no peer or mailbox right now: ${result.unknown.join(", ")}`);
+      }
+      console.log(`Send to it: bun cli.ts send ${result.group.name} <message>`);
+    } catch (e) {
+      console.error(`Error: ${e instanceof Error ? e.message : String(e)}`);
       process.exit(1);
     }
+    break;
+  }
+
+  case "broadcast": {
     try {
       const peers = await listAllPeers();
       const self = findSelf(peers, process.cwd());
       const selfKey = self ? sessionKey(self) : null;
+
+      // A first argument that names a real group scopes the broadcast to it;
+      // anything else is the message, as before.
+      const { groups, memberships } = await fetchGroups(self?.id).catch(() => ({
+        groups: [] as Group[],
+        memberships: [] as string[],
+      }));
+      const first = process.argv[3] ?? "";
+      const named = groups.find((g) => g.name === normalizeGroupName(first));
+      const rest = named ? process.argv.slice(4) : process.argv.slice(3);
+      const scope = broadcastScope(memberships, named?.name ?? null);
+
+      if (scope.kind === "ambiguous") {
+        console.error(
+          `You are in ${scope.groups.length} groups (${scope.groups.join(", ")}) — ` +
+            `name the one to broadcast to: bun cli.ts broadcast <group> <message>`
+        );
+        process.exit(1);
+      }
+
+      const msg = await messageFromArgsOrStdin(
+        rest,
+        scope.kind === "group" ? `Message to ${scope.name}` : "Message to every peer"
+      );
+      if (!msg) {
+        console.error("Usage: bun cli.ts broadcast [group] <message>  (or pipe the message on stdin)");
+        process.exit(1);
+      }
+
+      // A group is an address the broker fans out itself — one request, one
+      // copy per member, same rules as any send to it.
+      if (scope.kind === "group") {
+        const result = await brokerFetch<SendMessageResponse>("/send-message", {
+          from_id: self?.id ?? "cli",
+          to: scope.name,
+          text: msg,
+        });
+        if (result.group) printFanout(result.group);
+        if (!result.ok && result.error) console.error(result.error);
+        break;
+      }
 
       // One message per session: collapse agent groups to their primary and
       // skip our own session
@@ -442,11 +632,21 @@ switch (cmd) {
     const follow = process.argv.includes("-f");
     const nIdx = process.argv.indexOf("-n");
     const limit = nIdx > -1 ? parseInt(process.argv[nIdx + 1] ?? "50", 10) || 50 : 50;
+    // Run from inside a session, the log shows only that session's own
+    // traffic — a group's messages are nobody else's business. --all is the
+    // whole feed, for watching the network from a shell.
+    const all = process.argv.includes("--all");
+    const viewer = all
+      ? null
+      : findSelf(await listAllPeers().catch(() => [] as Peer[]), process.cwd());
     const fmt = (m: Message) =>
-      `${m.sent_at.slice(0, 19).replace("T", " ")}  ${m.from_name || m.from_id} -> ${m.to_name || m.to_id}: ${m.text}`;
+      `${m.sent_at.slice(0, 19).replace("T", " ")}  ${m.from_name || m.from_id} -> ${m.to_name || m.to_id}${m.group_name ? ` (${m.group_name})` : ""}: ${m.text}`;
     let lastId = 0;
     try {
-      const initial = await brokerFetch<{ messages: Message[] }>("/log", { limit });
+      const initial = await brokerFetch<{ messages: Message[] }>("/log", {
+        limit,
+        viewer_id: viewer?.id,
+      });
       if (initial.messages.length === 0 && !follow) {
         console.log("No messages logged yet.");
         break;
@@ -465,6 +665,7 @@ switch (cmd) {
         const res = await brokerFetch<{ messages: Message[] }>("/log", {
           after_id: lastId,
           limit: 500,
+          viewer_id: viewer?.id,
         });
         for (const m of res.messages) {
           console.log(fmt(m));
@@ -808,11 +1009,14 @@ Usage:
   bun cli.ts status              Show broker status and all peers
   bun cli.ts peers               List all peers
   bun cli.ts send <target> <msg> Send a message (target: name, ID, or ~/path)
-  bun cli.ts broadcast <msg>     Send a message to every peer (one per session)
+  bun cli.ts broadcast [grp] <msg> Send to every peer, or to one group
+  bun cli.ts group               List peer groups
+  bun cli.ts group <name> <peers...>  Create or replace a group
+  bun cli.ts group rm <name>     Delete a group
   bun cli.ts whoami              Show this session's peer name and ID
   bun cli.ts iam <name>          Rename this session's peer
   bun cli.ts statusline          Statusline command (Claude Code JSON on stdin)
-  bun cli.ts log [-n N] [-f]     Show message history (-f follows, tail-style)
+  bun cli.ts log [-n N] [-f] [--all]  Message history (-f follows; --all: every peer's)
   bun cli.ts kill <name|id|path> Remove a peer (stops its MCP server when local)
   bun cli.ts network-setup       Cross-machine peering (--show, --client <url> --token <t>)
   bun cli.ts update              Pull latest code, reinstall deps, restart the broker

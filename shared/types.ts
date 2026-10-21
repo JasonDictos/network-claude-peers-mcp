@@ -34,9 +34,14 @@ export interface Message {
   /** Sender/recipient names at send time (survive peer death, for the log). */
   from_name: string;
   to_name: string;
+  /** Mailbox the message was addressed to — outlives the recipient's id. */
+  to_host: string | null;
+  to_cwd: string | null;
   text: string;
   sent_at: string; // ISO timestamp
   delivered: boolean;
+  /** Group this copy was addressed to, when it was sent to one. */
+  group_name?: string | null;
 }
 
 // --- Broker API types ---
@@ -85,6 +90,22 @@ export interface SendMessageRequest {
   text: string;
 }
 
+/** One arm of a group fan-out: what happened for a single member. */
+export interface GroupDelivery {
+  /** The member target as the group lists it. */
+  member: string;
+  ok: boolean;
+  error?: string;
+  queued_offline?: boolean;
+  recipient_no_push?: boolean;
+  to?: { id: PeerId; name: string };
+  /**
+   * Why no message was sent for this member although nothing failed: it is
+   * the sender, or another member already covers that session.
+   */
+  skipped?: "self" | "duplicate";
+}
+
 export interface SendMessageResponse {
   ok: boolean;
   error?: string;
@@ -99,6 +120,8 @@ export interface SendMessageResponse {
   to?: { id: PeerId; name: string };
   /** On ambiguous/no-match errors: peers the sender could target instead. */
   candidates?: Peer[];
+  /** Set when the target was a group: one entry per member. */
+  group?: { name: string; deliveries: GroupDelivery[] };
 }
 
 export interface PollMessagesRequest {

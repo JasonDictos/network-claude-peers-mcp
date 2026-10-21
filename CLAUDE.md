@@ -15,6 +15,7 @@ Peer discovery and messaging MCP channel for Claude Code instances.
 - `shared/types.ts` — Shared TypeScript types for broker API.
 - `shared/names.ts` — Adjective-noun name generation.
 - `shared/resolve.ts` — Pure target-resolution logic (host prefix → ID → name → path, with ambiguity reporting).
+- `shared/groups.ts` — Peer groups: storage, membership resolution, broadcast scope, and the log's party-only visibility rule.
 - `shared/config.ts` — Network config (broker URL, token, bind) from env or `~/.claude-peers.json`.
 - `shared/hosts.ts` — Hostname matching (short/FQDN/IP), DNS resolution, local address discovery.
 - `shared/client.ts` — Broker transport: remote URL → unix socket → localhost TCP.
@@ -45,11 +46,13 @@ subagent, `<name>-1`), and only one of them is the one Claude Code pushes to.
 # CLI:
 bun cli.ts status
 bun cli.ts peers [hostname]
-bun cli.ts send <name|id|path> <message>
+bun cli.ts send <name|id|path|group> <message>   # no message = compose in $EDITOR
+bun cli.ts group [name] [peers...]   # list/create a group; `group rm <name>` deletes
+bun cli.ts broadcast [group] <message>   # a member's bare broadcast stays in its group
 bun cli.ts whoami
 bun cli.ts iam <name>   # rename this session's peer
 bun cli.ts statusline   # for statusLine in ~/.claude/settings.json
-bun cli.ts log -f          # full message text; run as a background task for ctrl-b
+bun cli.ts log -f [--all]  # this session's messages (--all: every peer's); background task for ctrl-b
 bun cli.ts network-setup   # cross-machine peering (hub) / --client <host> --token <t>
 bun cli.ts kill-broker
 ```

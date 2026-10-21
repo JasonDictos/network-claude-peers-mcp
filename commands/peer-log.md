@@ -1,6 +1,6 @@
 ---
 description: Show recent claude-peers messages, full text, with sender names
-argument-hint: [count]
+argument-hint: [count] [--all]
 allowed-tools: Bash(@@BUN@@ @@REPO@@/cli.ts:*)
 ---
 
@@ -10,4 +10,4 @@ Recent peer messages (full, untruncated):
 
 !`@@BUN@@ @@REPO@@/cli.ts log -n $ARGUMENTS`
 
-Show the messages above to the user verbatim in a code block (do not summarize or truncate). If the user wants a live feed, offer to run `@@BUN@@ @@REPO@@/cli.ts log -f` as a background task so they can watch it with ctrl-b.
+Show the messages above to the user verbatim in a code block (do not summarize or truncate). The log shows only messages this session sent or received, so a group's traffic stays with its members; if the user wants every peer's messages, re-run it with `--all`. If the user wants a live feed, offer to run `@@BUN@@ @@REPO@@/cli.ts log -f` as a background task so they can watch it with ctrl-b.

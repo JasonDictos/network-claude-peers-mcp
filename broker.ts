@@ -20,6 +20,7 @@ import type {
   PollMessagesRequest,
   PollMessagesResponse,
   SendMessageResponse,
+  GroupDelivery,
   BoundNameRequest,
   BoundNameResponse,
   Peer,
@@ -29,6 +30,19 @@ import { generateName, childName, scopedName, repoBase, isRandomName } from "./s
 import { resolveTarget, resolveMailbox, sessionKey, sessionKeyOf } from "./shared/resolve.ts";
 import { adoptOrphanedMail } from "./shared/mailbox.ts";
 import { boundName } from "./shared/bindings.ts";
+import {
+  createGroupTable,
+  groupMembers,
+  listGroups,
+  setGroup,
+  deleteGroup,
+  normalizeGroupName,
+  groupNameError,
+  membershipsOf,
+  sameSession,
+  isVisibleTo,
+} from "./shared/groups.ts";
+import type { Group } from "./shared/groups.ts";
 import type { Mailbox } from "./shared/resolve.ts";
 import { getRuntimeId } from "./shared/runtime.ts";
 import { loadConfig, isLoopbackBind, isLoopbackAddress, machineName, writeMachineMarker } from "./shared/config.ts";
@@ -213,6 +227,12 @@ ensureColumn("messages", "to_name TEXT NOT NULL DEFAULT ''");
 // outlives them, so mail can wait for a session to come back
 ensureColumn("messages", "to_host TEXT");
 ensureColumn("messages", "to_cwd TEXT");
+// The group a message was addressed to, when it was sent to one. Kept so the
+// log can say which group a copy belongs to.
+ensureColumn("messages", "group_name TEXT");
+
+// Groups: one name addressing several peers (shared/groups.ts)
+createGroupTable(db);
 
 /**
  * Liveness: pid check (signal 0) when the peer shares our PID namespace,
@@ -379,8 +399,8 @@ const selectAllPeers = db.prepare(`
 `);
 
 const insertMessage = db.prepare(`
-  INSERT INTO messages (from_id, to_id, from_name, to_name, to_host, to_cwd, text, sent_at, delivered)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+  INSERT INTO messages (from_id, to_id, from_name, to_name, to_host, to_cwd, text, sent_at, group_name, delivered)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
 `);
 
 const selectRecentMessages = db.prepare(`
@@ -625,14 +645,20 @@ function senderName(fromId: string): string {
   return row?.name ?? fromId;
 }
 
-function handleSendMessage(body: SendMessageRequest): SendMessageResponse {
-  const target = body.to ?? body.to_id;
-  if (!target) {
-    return { ok: false, error: "Missing target: pass `to` (peer ID, name, or path)" };
-  }
-
+/**
+ * Deliver to one target: a peer id, name or path.
+ *
+ * `group` names the group this copy belongs to, when the delivery is one arm
+ * of a fan-out — it rides along on the message so the log can show it.
+ */
+function deliverTo(
+  fromId: string,
+  target: string,
+  text: string,
+  group: string | null
+): SendMessageResponse {
   // Resolve against live peers, excluding the sender (a path can match yourself)
-  const peers = livePeers().filter((p) => p.id !== body.from_id);
+  const peers = livePeers().filter((p) => p.id !== fromId);
   const resolution = resolveTarget(peers, target, process.env.HOME ?? "/");
 
   if (resolution.kind === "none") {
@@ -643,14 +669,15 @@ function handleSendMessage(body: SendMessageRequest): SendMessageResponse {
     const box = resolveMailbox(boxes, target, process.env.HOME ?? "/");
     if (box.kind === "match") {
       insertMessage.run(
-        body.from_id,
+        fromId,
         "",
-        senderName(body.from_id),
+        senderName(fromId),
         box.box.name,
         box.box.host,
         box.box.cwd,
-        body.text,
-        new Date().toISOString()
+        text,
+        new Date().toISOString(),
+        group
       );
       return {
         ok: true,
@@ -687,16 +714,189 @@ function handleSendMessage(body: SendMessageRequest): SendMessageResponse {
   // reporting a delivery that will not surface.
   const noPush = peer.push_enabled === 0;
   insertMessage.run(
-    body.from_id,
+    fromId,
     peer.id,
-    senderName(body.from_id),
+    senderName(fromId),
     peer.name,
     peerHost(peer),
     peer.cwd,
-    body.text,
-    new Date().toISOString()
+    text,
+    new Date().toISOString(),
+    group
   );
-  return { ok: true, to: { id: peer.id, name: peer.name } };
+  return { ok: true, recipient_no_push: noPush || undefined, to: { id: peer.id, name: peer.name } };
+}
+
+/** A single delivery's outcome, without the whole peer roster riding along. */
+function asDelivery(member: string, r: SendMessageResponse): GroupDelivery {
+  return {
+    member,
+    ok: r.ok,
+    error: r.error,
+    queued_offline: r.queued_offline,
+    recipient_no_push: r.recipient_no_push,
+    to: r.to,
+  };
+}
+
+/**
+ * Fan a message out to every member of a group.
+ *
+ * One copy per member session, so a story reaches each of the three sessions
+ * you meant — and only once, however many ways a member happens to be named.
+ * The sender is skipped: it wrote the thing.
+ */
+function sendToGroup(
+  fromId: string,
+  name: string,
+  members: string[],
+  text: string
+): SendMessageResponse {
+  const peers = livePeers();
+  const self = peers.find((p) => p.id === fromId) ?? null;
+  const home = process.env.HOME ?? "/";
+  const deliveries: GroupDelivery[] = [];
+  const covered: Peer[] = [];
+
+  for (const member of members) {
+    const resolution = resolveTarget(peers, member, home);
+    if (resolution.kind === "ambiguous") {
+      deliveries.push({
+        member,
+        ok: false,
+        error: `matches ${resolution.candidates.length} peers — name one in the group instead`,
+      });
+      continue;
+    }
+    if (resolution.kind === "none") {
+      // Offline, or a path with no session right now: the single-target path
+      // queues it in the mailbox if it knows one.
+      const result = deliverTo(fromId, member, text, name);
+      deliveries.push(
+        result.candidates
+          ? { member, ok: false, error: "no live session, and no mailbox known for it" }
+          : asDelivery(member, result)
+      );
+      continue;
+    }
+    const peer = resolution.peer;
+    if (self && sameSession(peer, self)) {
+      deliveries.push({ member, ok: true, skipped: "self" });
+      continue;
+    }
+    if (covered.some((c) => sameSession(c, peer))) {
+      deliveries.push({ member, ok: true, skipped: "duplicate" });
+      continue;
+    }
+    covered.push(peer);
+    deliveries.push(asDelivery(member, deliverTo(fromId, peer.id, text, name)));
+  }
+
+  const sent = deliveries.filter((d) => d.ok && !d.skipped).length;
+  return {
+    ok: sent > 0,
+    error:
+      sent > 0
+        ? undefined
+        : `No member of "${name}" could be reached — see deliveries for each one.`,
+    group: { name, deliveries },
+  };
+}
+
+function handleSendMessage(body: SendMessageRequest): SendMessageResponse {
+  const target = body.to ?? body.to_id;
+  if (!target) {
+    return { ok: false, error: "Missing target: pass `to` (peer ID, name, or path)" };
+  }
+
+  const members = groupMembers(db, target);
+  if (members) {
+    // A live peer owns the name first. Group creation refuses a name a peer
+    // already holds, but an `iam` rename afterwards can still collide, and
+    // the peer you can see must be the one you reach.
+    const live = resolveTarget(
+      livePeers().filter((p) => p.id !== body.from_id),
+      target,
+      process.env.HOME ?? "/"
+    );
+    if (live.kind === "none") {
+      return sendToGroup(body.from_id, normalizeGroupName(target), members, body.text);
+    }
+  }
+
+  return deliverTo(body.from_id, target, body.text, null);
+}
+
+/** Groups, plus the ones a given peer belongs to (for broadcast scope). */
+function handleGroups(body: { peer_id?: string }): {
+  groups: Group[];
+  memberships: string[];
+} {
+  const groups = listGroups(db);
+  const peers = livePeers();
+  const self = body.peer_id ? peers.find((p) => p.id === body.peer_id) : undefined;
+  const memberships = self
+    ? membershipsOf(groups, self, peers, process.env.HOME ?? "/")
+    : [];
+  return { groups, memberships };
+}
+
+function handleSetGroup(body: { name?: string; members?: string[] }): {
+  ok: boolean;
+  error?: string;
+  group?: Group;
+  /** Members that match no live peer and no known mailbox — a likely typo. */
+  unknown?: string[];
+} {
+  const name = (body.name ?? "").trim();
+  const nameError = groupNameError(name);
+  if (nameError) return { ok: false, error: nameError };
+
+  const members = (body.members ?? []).map((m) => m.trim()).filter(Boolean);
+  if (members.length === 0) {
+    return { ok: false, error: `a group needs members: set-group ${name} <peer> <peer> ...` };
+  }
+
+  const key = normalizeGroupName(name);
+  const peers = livePeers();
+  const home = process.env.HOME ?? "/";
+
+  // A group name is addressed exactly where a peer name is, so a collision
+  // would make one of the two unreachable.
+  if (peers.some((p) => p.name.toLowerCase() === key)) {
+    return { ok: false, error: `"${key}" is a live peer's name — pick another group name` };
+  }
+  const boxes = db.query("SELECT host, cwd, name FROM name_bindings").all() as Mailbox[];
+  if (boxes.some((b) => b.name.toLowerCase() === key)) {
+    return {
+      ok: false,
+      error: `"${key}" is the sticky name of ${
+        boxes.find((b) => b.name.toLowerCase() === key)!.cwd
+      } — pick another group name`,
+    };
+  }
+
+  // Nesting is not supported: a member naming a group would resolve to
+  // nothing at send time, which looks like a dead peer rather than a rule.
+  const nested = members.filter((m) => groupMembers(db, m) !== null);
+  if (nested.length > 0) {
+    return { ok: false, error: `a group cannot contain a group (${nested.join(", ")})` };
+  }
+
+  const unknown = members.filter(
+    (m) =>
+      resolveTarget(peers, m, home).kind === "none" &&
+      resolveMailbox(boxes, m, home).kind === "none"
+  );
+
+  setGroup(db, key, members);
+  return { ok: true, group: { name: key, members }, unknown: unknown.length ? unknown : undefined };
+}
+
+function handleDeleteGroup(body: { name?: string }): { ok: boolean; existed: boolean } {
+  const name = (body.name ?? "").trim();
+  if (!name) return { ok: false, existed: false };
+  return { ok: true, existed: deleteGroup(db, name) };
 }
 
 /** Undelivered count for a peer — does NOT consume, unlike /poll-messages. */
@@ -712,10 +912,26 @@ function handlePending(body: { id: string }): { count: number } {
   return { count: row?.n ?? 0 };
 }
 
-function handleLog(body: { limit?: number; after_id?: number }): { messages: Message[] } {
+function handleLog(body: { limit?: number; after_id?: number; viewer_id?: string }): {
+  messages: Message[];
+} {
   const limit = Math.min(Math.max(body.limit ?? 50, 1), 500);
-  const messages = selectRecentMessages.all(body.after_id ?? 0, limit) as Message[];
-  return { messages };
+  const after = body.after_id ?? 0;
+
+  // Unidentified caller (a shell, not a session) gets the whole feed — that
+  // is the operator's monitoring view.
+  const peer = body.viewer_id
+    ? (db.query("SELECT * FROM peers WHERE id = ?").get(body.viewer_id) as Peer | null)
+    : null;
+  if (!peer) return { messages: selectRecentMessages.all(after, limit) as Message[] };
+
+  // A peer sees only what it was party to, so a group's traffic stays in the
+  // group. Over-read a bounded window and filter, so the limit counts
+  // messages the caller can actually see rather than rows scanned.
+  const viewer = { id: peer.id, name: peer.name, host: peerHost(peer), cwd: peer.cwd };
+  const window = Math.min(Math.max(limit * 10, 500), 2000);
+  const rows = selectRecentMessages.all(after, window) as Message[];
+  return { messages: rows.filter((m) => isVisibleTo(m, viewer)).slice(-limit) };
 }
 
 /**
@@ -820,7 +1036,15 @@ async function handleRequest(req: Request, trusted: boolean): Promise<Response> 
       case "/bound-name":
         return Response.json(handleBoundName(body as BoundNameRequest));
       case "/log":
-        return Response.json(handleLog(body as { limit?: number; after_id?: number }));
+        return Response.json(
+          handleLog(body as { limit?: number; after_id?: number; viewer_id?: string })
+        );
+      case "/groups":
+        return Response.json(handleGroups(body as { peer_id?: string }));
+      case "/set-group":
+        return Response.json(handleSetGroup(body as { name?: string; members?: string[] }));
+      case "/delete-group":
+        return Response.json(handleDeleteGroup(body as { name?: string }));
       case "/unregister":
         handleUnregister(body as { id: string });
         return Response.json({ ok: true });

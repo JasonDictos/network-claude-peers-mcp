@@ -227,9 +227,11 @@ IMPORTANT: When you receive a <channel source="claude-peers" ...> message, RESPO
 
 Read the from_name, from_id, from_summary, and from_cwd attributes to understand who sent the message. Reply by calling send_message with their from_name or from_id.
 
+A \`group\` attribute means the message went to every member of that group, not to you alone. Reply to the group by name to reach all of them; reply to the sender to answer privately. Messages sent to a group are visible only to its members.
+
 Available tools:
 - list_peers: Discover other Claude Code instances (scope: machine/directory/repo)
-- send_message: Send a message to another instance by name, ID, or directory path
+- send_message: Send a message to another instance by name, ID, or directory path — or to a group name, which delivers one copy to each member
 - whoami: Get your own name, ID, and context (use your name when referring to yourself)
 - set_summary: Set a 1-2 sentence summary of what you're working on (visible to other peers)
 - check_messages: Manually check for new messages
@@ -261,14 +263,14 @@ const TOOLS = [
   {
     name: "send_message",
     description:
-      "Send a message to another Claude Code instance. Address it by peer name (e.g. \"archiver-tools\"), peer ID, or directory path (e.g. \"~/archiver-tools\" — matches the peer's working directory or git repo). The message is pushed into their session immediately via channel notification.",
+      "Send a message to another Claude Code instance. Address it by peer name (e.g. \"archiver-tools\"), peer ID, or directory path (e.g. \"~/archiver-tools\" — matches the peer's working directory or git repo). The message is pushed into their session immediately via channel notification. A group name sends one copy to each of its members.",
     inputSchema: {
       type: "object" as const,
       properties: {
         to: {
           type: "string" as const,
           description:
-            "Target peer: a name or ID from list_peers, or a directory path like ~/archiver-tools",
+            "Target: a peer name or ID from list_peers, a directory path like ~/archiver-tools, or the name of a group of peers",
         },
         message: {
           type: "string" as const,
@@ -401,6 +403,30 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           to: target,
           text: message,
         });
+        if (result.group) {
+          // One line per member: a partial fan-out is the normal case (a
+          // member offline, or the group containing this very session), and
+          // the sender needs to know who actually has it.
+          const lines = result.group.deliveries.map((d) => {
+            const who = d.to?.name || d.member;
+            if (d.skipped === "self") return `- ${who}: skipped, that is you`;
+            if (d.skipped === "duplicate") return `- ${who}: skipped, another member covers that session`;
+            if (!d.ok) return `- ${d.member}: FAILED — ${d.error}`;
+            if (d.queued_offline) return `- ${who}: offline, queued for its mailbox`;
+            if (d.recipient_no_push) return `- ${who}: queued, but that session has no channel listener`;
+            return `- ${who}: delivered`;
+          });
+          const sent = result.group.deliveries.filter((d) => d.ok && !d.skipped).length;
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Sent to ${sent} of ${result.group.deliveries.length} member(s) of ${result.group.name}:\n${lines.join("\n")}`,
+              },
+            ],
+            isError: result.ok ? undefined : true,
+          };
+        }
         if (!result.ok) {
           let text = `Failed to send: ${result.error}`;
           if (result.candidates && result.candidates.length > 0) {
@@ -609,7 +635,11 @@ async function pollAndPushMessages() {
       // one-line preview ("← claude-peers: ...") renders only the content —
       // meta attributes are invisible there.
       const baseLabel = fromName || msg.from_name || msg.from_id;
-      const senderLabel = fromHost ? `${baseLabel}@${fromHost}` : baseLabel;
+      const withHost = fromHost ? `${baseLabel}@${fromHost}` : baseLabel;
+      // Name the group in the content too: the preview line is all the
+      // recipient sees at a glance, and a reply to the group rather than the
+      // sender alone depends on knowing it went to one.
+      const senderLabel = msg.group_name ? `${withHost} -> ${msg.group_name}` : withHost;
       await mcp.notification({
         method: "notifications/claude/channel",
         params: {
@@ -620,6 +650,7 @@ async function pollAndPushMessages() {
             from_host: fromHost,
             from_summary: fromSummary,
             from_cwd: fromCwd,
+            group: msg.group_name ?? "",
             sent_at: msg.sent_at,
           },
         },

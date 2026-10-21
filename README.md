@@ -38,6 +38,8 @@ This gives them a phone book and a mailbox.
 | 📬 **Durable messages** | Mail is addressed to a mailbox, not a process. Message a session that's *offline* and it's delivered when it comes back (held 7 days) |
 | ⚡ **Instant delivery** | Messages arrive as [channel](https://code.claude.com/docs/en/channels-reference) notifications mid-task, not on the next poll |
 | 📢 **Broadcast** | One message to every session, exactly once each — subagents collapse into their parent |
+| 👥 **Groups** | `group team-win a b c` makes one name for several peers. Send to it and each member gets a copy; a member's broadcast stays inside the group, and its traffic is not in anyone else's log |
+| ✍️ **Compose in $EDITOR** | `send team-win` with no message opens your editor — for the things too long to type on a command line |
 | 📜 **Full message log** | `log -f` tails all peer traffic, untruncated, from any machine |
 | 📊 **Status bar** | Shows the session's peer name, branch, model, and whether it's host or container |
 | 🔓 **Account-agnostic** | Not tied to your Claude login. Sessions signed into *different* accounts — or running as different OS users — talk to each other normally, because routing is by machine and directory, never by account |
@@ -134,9 +136,45 @@ libeen-cpp                     # by name, from anywhere
 archiver:~/worker              # that directory on that machine
 archiver:                      # that machine's session
 libeen-cpp@archiver            # the form shown in listings
+team-win                       # a group: one copy to each member
 ```
 
 An unqualified path that matches several sessions fails with the candidates listed, rather than silently picking one.
+
+### Groups
+
+A group is a name for several peers — an address, not a peer: no mailbox, no
+identity of its own. Sending to one delivers a copy to each member, which is
+how you get three sessions onto the same page in one go.
+
+```bash
+bun cli.ts group team-win dhash-daemon ~/archiver home:   # create or replace
+bun cli.ts group                                          # list groups
+bun cli.ts group team-win                                 # show one
+bun cli.ts group rm team-win                              # delete
+bun cli.ts send team-win "read docs/plan.md, then start"  # one copy each
+bun cli.ts send team-win                                  # compose in $EDITOR
+```
+
+Members are stored as you typed them, so a member addressed by path covers
+whoever works there. A session named twice — by name and by path, or a session
+and one of its agents — still gets one copy, and the sender is skipped.
+
+Group names live in the same namespace as peer names, so a name a peer or a
+mailbox already holds is refused.
+
+Membership also scopes two things:
+
+- **Broadcast.** From a session in exactly one group, `broadcast` reaches that
+  group rather than the whole machine. In several groups it asks which:
+  `broadcast <group> <message>`.
+- **The log.** A peer sees only the messages it sent or received, so a group's
+  traffic stays with its members. `log --all` is the unfiltered feed for
+  watching the network from a shell.
+
+The log filter keeps group traffic out of other sessions' casual reach; it is
+not an access boundary. Anything that can run `cli.ts log --all` on the broker
+host can still read everything.
 
 ## Multiple machines
 
@@ -203,11 +241,12 @@ Messages are addressed to a **mailbox** — the `(machine, directory, name)` a s
 ```bash
 bun cli.ts status                # broker status + all peers
 bun cli.ts peers [machine]       # list peers, optionally one machine
-bun cli.ts send <target> <msg>   # name, ID, or ~/path (also reads stdin)
-bun cli.ts broadcast <msg>       # every session, once each
+bun cli.ts send <target> <msg>   # name, ID, ~/path, or group (also reads stdin)
+bun cli.ts broadcast [grp] <msg> # every session once each, or one group
+bun cli.ts group [name] [peers]  # list, create or replace a group (rm <name> deletes)
 bun cli.ts whoami                # this session's identity
 bun cli.ts iam <name>            # rename this session
-bun cli.ts log [-n N] [-f]       # full message history; -f tails it live
+bun cli.ts log [-n N] [-f]       # this session's messages; -f tails it live, --all for every peer's
 bun cli.ts statusline            # for statusLine in settings.json
 bun cli.ts kill <name>           # remove a peer (stops its MCP server when local)
 bun cli.ts network-setup         # cross-machine peering
@@ -215,7 +254,9 @@ bun cli.ts update                # pull, reinstall, restart the broker
 bun cli.ts kill-broker           # stop the broker
 ```
 
-`send` and `broadcast` also read the message from **stdin** (pass `-`), which keeps shell metacharacters intact:
+With no message at all, `send` and `broadcast` open `$EDITOR` and send what you save — the way to write something longer than a command line, like a story for a group. Saving nothing aborts.
+
+They also read the message from **stdin** (pass `-`), which keeps shell metacharacters intact:
 
 ```bash
 bun cli.ts broadcast - <<'EOF'
@@ -228,14 +269,17 @@ EOF
 A session only displays messages addressed to *it*. To watch everything — including agent-to-agent chatter — tail the log in a spare pane, or have Claude run it as a background task so it's one keystroke away:
 
 ```bash
-bun cli.ts log -f
+bun cli.ts log -f --all
 ```
+
+Run from inside a session, `log` shows only that session's own traffic, so a
+group's messages stay with its members; `--all` is the whole feed.
 
 ## Slash commands
 
-`/peer-send`, `/peer-list`, `/peer-log`, `/peer-whoami`, `/peer-iam`, and
-`/peer-broadcast` are available in every session on a machine once they are
-installed:
+`/peer-send`, `/peer-list`, `/peer-log`, `/peer-whoami`, `/peer-iam`,
+`/peer-broadcast`, and `/peer-group` are available in every session on a
+machine once they are installed:
 
 ```bash
 bun cli.ts install-commands      # or just: bun cli.ts update

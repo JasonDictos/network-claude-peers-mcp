@@ -1,6 +1,6 @@
 ---
-description: Send a message to one claude-peers session by name, ID, or path
-argument-hint: <name|id|path> <message>
+description: Send a message to one claude-peers session, or to a group, by name, ID or path
+argument-hint: <name|id|path|group> <message>
 allowed-tools: Bash(@@BUN@@ @@REPO@@/cli.ts:*)
 ---
 
@@ -12,6 +12,6 @@ Send result:
 $ARGUMENTS
 PEER_MSG_EOF`
 
-The first whitespace-separated token of the arguments is the target; everything after it is the message.
+The first whitespace-separated token of the arguments is the target; everything after it is the message. The target can be a group name, in which case the output has one line per member.
 
-Report in one line whether it was delivered and to whom. If the output says the message was queued or the recipient is marked no-push, say so plainly — that means the recipient's session has no channel listener, so it will only see the message via check_messages rather than as a push. If it says no peer matches, show the candidate names from the output so the user can pick one.
+Report in one line whether it was delivered and to whom — for a group, who got it and who did not. If the output says the message was queued or the recipient is marked no-push, say so plainly — that means the recipient's session has no channel listener, so it will only see the message via check_messages rather than as a push. If it says no peer matches, show the candidate names from the output so the user can pick one.
