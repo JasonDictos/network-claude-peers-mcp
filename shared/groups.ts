@@ -182,6 +182,73 @@ export function deleteGroup(db: Database, name: string): boolean {
   return (row?.n ?? 0) > 0;
 }
 
+/**
+ * A group's member targets, with any member that names a group replaced by
+ * that group's members.
+ *
+ * Nesting is how "the handles2 crowd plus two more" becomes one name: the
+ * parent keeps tracking the child as its membership changes, instead of
+ * freezing a copy of it. A group already expanded is skipped, so a member
+ * listed twice over gets one copy and a cycle stops instead of looping.
+ *
+ * Null when `name` is not a group.
+ */
+export function expandMembers(groups: Group[], name: string): string[] | null {
+  const byName = new Map(groups.map((g) => [normalizeGroupName(g.name), g.members]));
+  const root = normalizeGroupName(name);
+  const start = byName.get(root);
+  if (!start) return null;
+
+  const expanded = new Set<string>([root]);
+  const out: string[] = [];
+  const walk = (members: string[]): void => {
+    for (const member of members) {
+      const key = normalizeGroupName(member);
+      const nested = byName.get(key);
+      if (nested) {
+        if (expanded.has(key)) continue;
+        expanded.add(key);
+        walk(nested);
+      } else if (!out.includes(member)) {
+        out.push(member);
+      }
+    }
+  };
+  walk(start);
+  return out;
+}
+
+/**
+ * The chain by which `name` contains itself, or null if it does not.
+ *
+ * Checked when a group is written, so a cycle is refused with the path that
+ * makes it rather than silently swallowed at send time.
+ */
+export function groupCycle(groups: Group[], name: string): string[] | null {
+  const byName = new Map(groups.map((g) => [normalizeGroupName(g.name), g.members]));
+  const root = normalizeGroupName(name);
+  if (!byName.has(root)) return null;
+
+  const path = [root];
+  const visited = new Set<string>([root]);
+  const walk = (key: string): string[] | null => {
+    for (const member of byName.get(key) ?? []) {
+      const next = normalizeGroupName(member);
+      if (!byName.has(next)) continue;
+      path.push(next);
+      if (next === root) return [...path];
+      if (!visited.has(next)) {
+        visited.add(next);
+        const found = walk(next);
+        if (found) return found;
+      }
+      path.pop();
+    }
+    return null;
+  };
+  return walk(root);
+}
+
 /** Same Claude Code session — an agent peer counts as its primary. */
 export function sameSession(a: Peer, b: Peer): boolean {
   const ka = sessionKey(a);
@@ -194,12 +261,14 @@ export function sameSession(a: Peer, b: Peer): boolean {
  *
  * Membership is stored as the target the user typed, so it is resolved the
  * same way a send is — a group listing "~/archiver" covers whatever session
- * is working there, which is the point of addressing by path.
+ * is working there, which is the point of addressing by path. A peer in a
+ * nested group belongs to the parent too, since a send to the parent
+ * reaches it.
  */
 export function membershipsOf(groups: Group[], peer: Peer, peers: Peer[], home: string): string[] {
   return groups
     .filter((g) =>
-      g.members.some((member) => {
+      (expandMembers(groups, g.name) ?? g.members).some((member) => {
         const r = resolveTarget(peers, member, home);
         if (r.kind === "match") return sameSession(r.peer, peer);
         if (r.kind === "ambiguous") return r.candidates.some((c) => sameSession(c, peer));

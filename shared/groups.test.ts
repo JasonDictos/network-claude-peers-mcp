@@ -11,6 +11,8 @@ import {
   listGroups,
   deleteGroup,
   membershipsOf,
+  expandMembers,
+  groupCycle,
 } from "./groups.ts";
 import type { Peer } from "./types.ts";
 
@@ -237,5 +239,110 @@ describe("membershipsOf", () => {
       { name: "team-win", members: ["dhash-daemon", "archiver2"] },
     ];
     expect(membershipsOf(groups, daemon, peers, home)).toEqual(["nightshift", "team-win"]);
+  });
+});
+
+describe("expandMembers", () => {
+  test("returns a flat group's members as typed", () => {
+    const groups = [{ name: "team-win", members: ["alpha", "bravo"] }];
+    expect(expandMembers(groups, "team-win")).toEqual(["alpha", "bravo"]);
+  });
+
+  test("returns null for a name that is not a group", () => {
+    expect(expandMembers([{ name: "team-win", members: ["alpha"] }], "nope")).toBeNull();
+  });
+
+  test("replaces a member group with its members", () => {
+    const groups = [
+      { name: "handles2", members: ["dhash-daemon", "libtagflow-cpp"] },
+      { name: "async2-team", members: ["handles2", "libeen-cpp4"] },
+    ];
+    expect(expandMembers(groups, "async2-team")).toEqual([
+      "dhash-daemon",
+      "libtagflow-cpp",
+      "libeen-cpp4",
+    ]);
+  });
+
+  test("expands a group nested two deep", () => {
+    const groups = [
+      { name: "inner", members: ["alpha"] },
+      { name: "middle", members: ["inner", "bravo"] },
+      { name: "outer", members: ["middle", "charlie"] },
+    ];
+    expect(expandMembers(groups, "outer")).toEqual(["alpha", "bravo", "charlie"]);
+  });
+
+  test("keeps one copy of a member listed twice over", () => {
+    const groups = [
+      { name: "handles2", members: ["dhash-daemon", "libeen-cpp4"] },
+      { name: "async2-team", members: ["handles2", "dhash-daemon"] },
+    ];
+    expect(expandMembers(groups, "async2-team")).toEqual(["dhash-daemon", "libeen-cpp4"]);
+  });
+
+  test("addresses a group case-insensitively, as a send does", () => {
+    const groups = [{ name: "team-win", members: ["alpha"] }];
+    expect(expandMembers(groups, "Team-Win")).toEqual(["alpha"]);
+  });
+
+  test("stops rather than looping on a cycle that got stored", () => {
+    const groups = [
+      { name: "a", members: ["b", "alpha"] },
+      { name: "b", members: ["a", "bravo"] },
+    ];
+    expect(expandMembers(groups, "a")).toEqual(["bravo", "alpha"]);
+  });
+});
+
+describe("groupCycle", () => {
+  test("passes a group of plain peers", () => {
+    expect(groupCycle([{ name: "team-win", members: ["alpha", "bravo"] }], "team-win")).toBeNull();
+  });
+
+  test("passes a group nesting another", () => {
+    const groups = [
+      { name: "handles2", members: ["dhash-daemon"] },
+      { name: "async2-team", members: ["handles2"] },
+    ];
+    expect(groupCycle(groups, "async2-team")).toBeNull();
+  });
+
+  test("catches a group that lists itself", () => {
+    const groups = [{ name: "team-win", members: ["team-win", "alpha"] }];
+    expect(groupCycle(groups, "team-win")).toEqual(["team-win", "team-win"]);
+  });
+
+  test("catches a cycle through another group, naming the path", () => {
+    const groups = [
+      { name: "a", members: ["b"] },
+      { name: "b", members: ["c"] },
+      { name: "c", members: ["a"] },
+    ];
+    expect(groupCycle(groups, "a")).toEqual(["a", "b", "c", "a"]);
+  });
+
+  test("ignores a cycle that does not come back to this group", () => {
+    const groups = [
+      { name: "a", members: ["b"] },
+      { name: "b", members: ["c"] },
+      { name: "c", members: ["b"] },
+    ];
+    expect(groupCycle(groups, "a")).toBeNull();
+  });
+});
+
+describe("membershipsOf, through a nested group", () => {
+  const home = "/home/jason";
+  const daemon = peer({ id: "aaa", name: "dhash-daemon", cwd: "/home/jason/dhash-daemon" });
+  const peers = [daemon];
+
+  test("counts a peer that is only in a member group", () => {
+    const groups = [
+      { name: "handles2", members: ["dhash-daemon"] },
+      { name: "async2-team", members: ["handles2"] },
+    ];
+    // In the order the groups came in, as every other membership answer is.
+    expect(membershipsOf(groups, daemon, peers, home)).toEqual(["handles2", "async2-team"]);
   });
 });

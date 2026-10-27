@@ -47,7 +47,7 @@ subagent, `<name>-1`), and only one of them is the one Claude Code pushes to.
 bun cli.ts status
 bun cli.ts peers [hostname]
 bun cli.ts send <name|id|path|group> <message>   # no message = compose in $EDITOR
-bun cli.ts group [name] [peers...]   # list/create a group; `group rm <name>` deletes
+bun cli.ts group [name] [peers...]   # list/create a group (a member may be a group); `group rm <name>` deletes
 bun cli.ts broadcast [group] <message>   # a member's bare broadcast stays in its group
 bun cli.ts whoami
 bun cli.ts iam <name>   # rename this session's peer

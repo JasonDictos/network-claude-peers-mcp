@@ -38,7 +38,7 @@ This gives them a phone book and a mailbox.
 | 📬 **Durable messages** | Mail is addressed to a mailbox, not a process. Message a session that's *offline* and it's delivered when it comes back (held 7 days) |
 | ⚡ **Instant delivery** | Messages arrive as [channel](https://code.claude.com/docs/en/channels-reference) notifications mid-task, not on the next poll |
 | 📢 **Broadcast** | One message to every session, exactly once each — subagents collapse into their parent |
-| 👥 **Groups** | `group team-win a b c` makes one name for several peers. Send to it and each member gets a copy; a member's broadcast stays inside the group, and its traffic is not in anyone else's log |
+| 👥 **Groups** | `group team-win a b c` makes one name for several peers, and a member can be another group. Send to it and each member gets a copy; a member's broadcast stays inside the group, and its traffic is not in anyone else's log |
 | ✍️ **Compose in $EDITOR** | `send team-win` with no message opens your editor — for the things too long to type on a command line |
 | 📜 **Full message log** | `log -f` tails all peer traffic, untruncated, from any machine |
 | 📊 **Status bar** | Shows the session's peer name, branch, model, and whether it's host or container |
@@ -160,6 +160,17 @@ Members are stored as you typed them, so a member addressed by path covers
 whoever works there. A session named twice — by name and by path, or a session
 and one of its agents — still gets one copy, and the sender is skipped.
 
+A member may be another group, which contributes its members at send time:
+
+```bash
+bun cli.ts group async2-team handles2 libeen-cpp4   # handles2 is a group
+async2-team: handles2, libeen-cpp4
+  reaches: dhash-daemon, libtagflow-cpp, libeen-cpp4
+```
+
+The parent stores the child's name, not a copy of its membership, so it keeps
+up as the child changes. A group that would contain itself is refused.
+
 Group names live in the same namespace as peer names, so a name a peer or a
 mailbox already holds is refused.
 
@@ -278,8 +289,9 @@ group's messages stay with its members; `--all` is the whole feed.
 ## Slash commands
 
 `/peer-send`, `/peer-list`, `/peer-log`, `/peer-whoami`, `/peer-iam`,
-`/peer-broadcast`, and `/peer-group` are available in every session on a
-machine once they are installed:
+`/peer-broadcast`, `/peer-group` and its one-job siblings
+`/peer-group-list`, `/peer-group-create` and `/peer-group-delete` are
+available in every session on a machine once they are installed:
 
 ```bash
 bun cli.ts install-commands      # or just: bun cli.ts update

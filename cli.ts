@@ -10,6 +10,7 @@
  *   bun cli.ts send <target> <msg> — Send a message (target: name, ID, or path)
  *   bun cli.ts broadcast [grp] <msg> — Send to every peer, or to one group
  *   bun cli.ts group [name] [peers]  — List, create or replace a peer group
+ *                                      (a member may be another group)
  *   bun cli.ts whoami              — Show this session's peer name and ID
  *   bun cli.ts iam <name>          — Rename this session's peer
  *   bun cli.ts statusline          — Statusline command (reads Claude Code JSON on stdin)
@@ -33,7 +34,13 @@ import { renderCommand, commandAction, summarizeInstall, type CommandResult } fr
 import { brokerFetch, BROKER_PORT, BROKER_URL, IS_REMOTE } from "./shared/client.ts";
 import { claudeKey, getParentPid, getRuntimeId } from "./shared/runtime.ts";
 import { sessionKey, resolveTarget } from "./shared/resolve.ts";
-import { broadcastScope, groupNameError, normalizeGroupName, type Group } from "./shared/groups.ts";
+import {
+  broadcastScope,
+  expandMembers,
+  groupNameError,
+  normalizeGroupName,
+  type Group,
+} from "./shared/groups.ts";
 import { loadConfig, saveConfig, generateToken, CONFIG_PATH, machineName, accountEmail, hostHome } from "./shared/config.ts";
 import { hostMatches, resolveHost, localAddresses } from "./shared/hosts.ts";
 import { hostname, networkInterfaces, tmpdir } from "node:os";
@@ -186,6 +193,19 @@ function printFanout(group: { name: string; deliveries: GroupDelivery[] }): numb
 }
 
 /** Groups the broker knows, and the ones a given peer belongs to. */
+/**
+ * A group as one line, plus the peers it comes to when a member is a group.
+ *
+ * The stored membership is what was typed, so a nested group shows as its
+ * own name — the expansion is the part you would otherwise have to work out.
+ */
+function printGroup(g: Group, expanded: string[]): void {
+  console.log(`${g.name}: ${g.members.join(", ")}`);
+  if (expanded.join("\u0000") !== g.members.join("\u0000")) {
+    console.log(`  reaches: ${expanded.join(", ")}`);
+  }
+}
+
 function fetchGroups(peerId?: string): Promise<{ groups: Group[]; memberships: string[] }> {
   return brokerFetch<{ groups: Group[]; memberships: string[] }>("/groups", { peer_id: peerId });
 }
@@ -367,7 +387,7 @@ switch (cmd) {
           console.log("No groups. Create one: bun cli.ts group <name> <peer> <peer> ...");
           break;
         }
-        for (const g of groups) console.log(`${g.name}: ${g.members.join(", ")}`);
+        for (const g of groups) printGroup(g, expandMembers(groups, g.name) ?? g.members);
         break;
       }
 
@@ -392,7 +412,7 @@ switch (cmd) {
         const { groups } = await fetchGroups();
         const group = groups.find((g) => g.name === normalizeGroupName(sub));
         if (group) {
-          console.log(`${group.name}: ${group.members.join(", ")}`);
+          printGroup(group, expandMembers(groups, group.name) ?? group.members);
           break;
         }
         console.error(`No group named "${sub}". Create it: bun cli.ts group ${sub} <peer> <peer> ...`);
@@ -408,13 +428,14 @@ switch (cmd) {
         ok: boolean;
         error?: string;
         group?: Group;
+        expanded?: string[];
         unknown?: string[];
       }>("/set-group", { name: sub, members });
       if (!result.ok || !result.group) {
         console.error(`Failed: ${result.error}`);
         process.exit(1);
       }
-      console.log(`${result.group.name}: ${result.group.members.join(", ")}`);
+      printGroup(result.group, result.expanded ?? result.group.members);
       if (result.unknown) {
         console.log(`Matching no peer or mailbox right now: ${result.unknown.join(", ")}`);
       }
@@ -1011,7 +1032,7 @@ Usage:
   bun cli.ts send <target> <msg> Send a message (target: name, ID, or ~/path)
   bun cli.ts broadcast [grp] <msg> Send to every peer, or to one group
   bun cli.ts group               List peer groups
-  bun cli.ts group <name> <peers...>  Create or replace a group
+  bun cli.ts group <name> <peers...>  Create or replace a group (a peer or group each)
   bun cli.ts group rm <name>     Delete a group
   bun cli.ts whoami              Show this session's peer name and ID
   bun cli.ts iam <name>          Rename this session's peer

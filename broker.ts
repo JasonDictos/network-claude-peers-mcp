@@ -33,6 +33,8 @@ import { boundName } from "./shared/bindings.ts";
 import {
   createGroupTable,
   groupMembers,
+  expandMembers,
+  groupCycle,
   listGroups,
   setGroup,
   deleteGroup,
@@ -809,7 +811,9 @@ function handleSendMessage(body: SendMessageRequest): SendMessageResponse {
     return { ok: false, error: "Missing target: pass `to` (peer ID, name, or path)" };
   }
 
-  const members = groupMembers(db, target);
+  // Nested groups are expanded here, so a member naming a group contributes
+  // its members rather than a dead address.
+  const members = expandMembers(listGroups(db), target);
   if (members) {
     // A live peer owns the name first. Group creation refuses a name a peer
     // already holds, but an `iam` rename afterwards can still collide, and
@@ -845,6 +849,8 @@ function handleSetGroup(body: { name?: string; members?: string[] }): {
   ok: boolean;
   error?: string;
   group?: Group;
+  /** The membership with nested groups expanded, when one was nested. */
+  expanded?: string[];
   /** Members that match no live peer and no known mailbox — a likely typo. */
   unknown?: string[];
 } {
@@ -876,21 +882,36 @@ function handleSetGroup(body: { name?: string; members?: string[] }): {
     };
   }
 
-  // Nesting is not supported: a member naming a group would resolve to
-  // nothing at send time, which looks like a dead peer rather than a rule.
-  const nested = members.filter((m) => groupMembers(db, m) !== null);
-  if (nested.length > 0) {
-    return { ok: false, error: `a group cannot contain a group (${nested.join(", ")})` };
+  // A member may name another group — it contributes that group's members at
+  // send time. Only a cycle is refused, since it has no membership to expand
+  // to and would otherwise be found at send time instead.
+  const prospective = [
+    ...listGroups(db).filter((g) => g.name !== key),
+    { name: key, members },
+  ];
+  const cycle = groupCycle(prospective, key);
+  if (cycle) {
+    return {
+      ok: false,
+      error: `that would make "${key}" contain itself (${cycle.join(" -> ")})`,
+    };
   }
 
   const unknown = members.filter(
     (m) =>
+      groupMembers(db, m) === null &&
       resolveTarget(peers, m, home).kind === "none" &&
       resolveMailbox(boxes, m, home).kind === "none"
   );
 
   setGroup(db, key, members);
-  return { ok: true, group: { name: key, members }, unknown: unknown.length ? unknown : undefined };
+  const expanded = expandMembers(listGroups(db), key) ?? members;
+  return {
+    ok: true,
+    group: { name: key, members },
+    expanded: expanded.join("\u0000") === members.join("\u0000") ? undefined : expanded,
+    unknown: unknown.length ? unknown : undefined,
+  };
 }
 
 function handleDeleteGroup(body: { name?: string }): { ok: boolean; existed: boolean } {
